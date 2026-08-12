@@ -66,9 +66,43 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
             return;
         }
 
+        migrateProfileData(enabled);
+
         putBoolean(MULTI_PROFILES, enabled);
         onProfileChanged();
-        //selectAccount(enabled ? MediaServiceManager.instance().getSelectedAccount() : null);
+    }
+
+    private static final String[] PROFILE_DATA_KEYS = {
+            "general_data",
+            "main_ui_data2",
+            "video_player_data",
+            "video_player_tweaks_data",
+            "blocked_channel_data"
+    };
+
+    private void migrateProfileData(boolean toMultiProfiles) {
+        String profileName = getProfileName();
+        if (TextUtils.isEmpty(profileName)) {
+            return;
+        }
+
+        for (String key : PROFILE_DATA_KEYS) {
+            String oldKey;
+            String newKey;
+
+            if (toMultiProfiles) {
+                oldKey = key;
+                newKey = profileName + "_" + key;
+            } else {
+                oldKey = profileName + "_" + key;
+                newKey = key;
+            }
+
+            String data = getData(oldKey);
+            if (data != null) {
+                setData(newKey, data);
+            }
+        }
     }
 
     public String getBootResolution() {
@@ -110,12 +144,13 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     }
 
     public String getProfileData(String key) {
-        //String data = getData(getProfileKey(key, isMultiProfilesEnabled()));
+        String data = getData(getProfileKey(key, isMultiProfilesEnabled()));
 
-        // Fallback to non-profile settings
-        //return data != null ? data : getData(key);
+        if (data == null && isMultiProfilesEnabled()) {
+            data = getData(key);
+        }
 
-        return getData(getProfileKey(key, isMultiProfilesEnabled()));
+        return data;
     }
 
     public void setProfileData(String key, String data) {
@@ -158,7 +193,19 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     }
 
     private void selectProfile(Account account) {
-        String profileName = account != null && account.getName() != null ? account.getName().replace(" ", "_") : ANONYMOUS_PROFILE_NAME;
+        String profileName;
+
+        if (account != null) {
+            if (account.getEmail() != null) {
+                profileName = account.getEmail().replace("@", "_at_").replace(".", "_");
+            } else if (account.getName() != null) {
+                profileName = account.getName().replace(" ", "_");
+            } else {
+                profileName = ANONYMOUS_PROFILE_NAME;
+            }
+        } else {
+            profileName = ANONYMOUS_PROFILE_NAME;
+        }
 
         setProfileName(profileName);
     }

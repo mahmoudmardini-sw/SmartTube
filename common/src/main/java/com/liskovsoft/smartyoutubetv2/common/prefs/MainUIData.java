@@ -293,6 +293,10 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
         return (mMenuItems & menuItems) == menuItems;
     }
 
+    public long getMenuItems() {
+        return mMenuItems;
+    }
+
     public void setMenuItemEnabled(long menuItems) {
         mMenuItems |= menuItems;
         persistState();
@@ -328,6 +332,10 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
 
     public boolean isTopButtonEnabled(int button) {
         return (mTopButtons & button) == button;
+    }
+
+    public int getTopButtons() {
+        return mTopButtons;
     }
 
     public void setTopButtonEnabled(int button) {

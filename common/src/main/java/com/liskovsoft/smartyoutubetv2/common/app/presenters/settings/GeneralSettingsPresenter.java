@@ -689,14 +689,23 @@ public class GeneralSettingsPresenter extends BasePresenter<Void> {
         PlayerTweaksData tweaksData = PlayerTweaksData.instance(getContext());
         SearchData searchData = SearchData.instance(getContext());
 
-        // Remove all
-        mMainUIData.setTopButtonDisabled(Integer.MAX_VALUE);
-        tweaksData.setPlayerButtonDisabled(Integer.MAX_VALUE);
-        mMainUIData.setMenuItemDisabled(Integer.MAX_VALUE);
-        BrowsePresenter.instance(getContext()).enableAllSections(false);
-        searchData.setPopularSearchesDisabled(true);
-
         if (enable) {
+            mGeneralData.saveChildModeSnapshot(
+                    mMainUIData.getTopButtons(),
+                    mMainUIData.getMenuItems(),
+                    tweaksData.getPlayerButtons(),
+                    tweaksData.isSuggestionsDisabled(),
+                    searchData.isPopularSearchesDisabled(),
+                    mPlayerData.getPlaybackMode()
+            );
+
+            // Remove all
+            mMainUIData.setTopButtonDisabled(Integer.MAX_VALUE);
+            tweaksData.setPlayerButtonDisabled(Integer.MAX_VALUE);
+            mMainUIData.setMenuItemDisabled(Integer.MAX_VALUE);
+            BrowsePresenter.instance(getContext()).enableAllSections(false);
+            searchData.setPopularSearchesDisabled(true);
+
             // apply child tweaks
             mMainUIData.setTopButtonEnabled(topButtons);
             tweaksData.setPlayerButtonEnabled(playerButtons);
@@ -707,14 +716,32 @@ public class GeneralSettingsPresenter extends BasePresenter<Void> {
             BrowsePresenter.instance(getContext()).enableSection(MediaGroup.TYPE_SUBSCRIPTIONS, true);
             BrowsePresenter.instance(getContext()).enableSection(MediaGroup.TYPE_CHANNEL_UPLOADS, true);
         } else {
-            // apply default tweaks
-            mMainUIData.setTopButtonEnabled(MainUIData.TOP_BUTTON_DEFAULT);
-            tweaksData.setPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DEFAULT);
-            mMainUIData.setMenuItemEnabled(MainUIData.MENU_ITEM_DEFAULT);
-            BrowsePresenter.instance(getContext()).enableAllSections(true);
-            tweaksData.setSuggestionsDisabled(false);
-            mPlayerData.setPlaybackMode(PlayerConstants.PLAYBACK_MODE_ALL);
-            searchData.setPopularSearchesDisabled(false);
+            if (mGeneralData.hasChildModeSnapshot()) {
+                mMainUIData.setTopButtonDisabled(Integer.MAX_VALUE);
+                mMainUIData.setTopButtonEnabled(mGeneralData.getChildModeSnapshotTopButtons());
+
+                mMainUIData.setMenuItemDisabled(Integer.MAX_VALUE);
+                mMainUIData.setMenuItemEnabled(mGeneralData.getChildModeSnapshotMenuItems());
+
+                tweaksData.setPlayerButtonDisabled(Integer.MAX_VALUE);
+                tweaksData.setPlayerButtonEnabled(mGeneralData.getChildModeSnapshotPlayerButtons());
+
+                tweaksData.setSuggestionsDisabled(mGeneralData.isChildModeSnapshotSuggestionsDisabled());
+                searchData.setPopularSearchesDisabled(mGeneralData.isChildModeSnapshotPopularSearchesDisabled());
+                mPlayerData.setPlaybackMode(mGeneralData.getChildModeSnapshotPlaybackMode());
+
+                BrowsePresenter.instance(getContext()).enableAllSections(true);
+
+                mGeneralData.clearChildModeSnapshot();
+            } else {
+                mMainUIData.setTopButtonEnabled(MainUIData.TOP_BUTTON_DEFAULT);
+                tweaksData.setPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DEFAULT);
+                mMainUIData.setMenuItemEnabled(MainUIData.MENU_ITEM_DEFAULT);
+                BrowsePresenter.instance(getContext()).enableAllSections(true);
+                tweaksData.setSuggestionsDisabled(false);
+                mPlayerData.setPlaybackMode(PlayerConstants.PLAYBACK_MODE_ALL);
+                searchData.setPopularSearchesDisabled(false);
+            }
         }
     }
 

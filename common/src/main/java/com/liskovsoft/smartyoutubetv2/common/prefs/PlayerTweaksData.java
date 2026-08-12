@@ -276,6 +276,10 @@ public class PlayerTweaksData implements ProfileChangeListener {
         return (mPlayerButtons & menuItems) == menuItems;
     }
 
+    public int getPlayerButtons() {
+        return mPlayerButtons;
+    }
+
     public void setPlayerButtonEnabled(int playerButtons) {
         mPlayerButtons |= playerButtons;
         persistData();

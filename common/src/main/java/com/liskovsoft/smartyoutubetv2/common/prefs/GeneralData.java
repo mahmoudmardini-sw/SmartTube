@@ -86,6 +86,13 @@ public class GeneralData implements ProfileChangeListener {
     private int mLocalDriveBackupFreqDays;
     private List<Video> mOldPinnedItems;
     private boolean mIsRemapSToSpeedToggleEnabled;
+    private int mChildModeSnapshotTopButtons;
+    private long mChildModeSnapshotMenuItems;
+    private int mChildModeSnapshotPlayerButtons;
+    private boolean mChildModeSnapshotSuggestionsDisabled;
+    private boolean mChildModeSnapshotPopularSearchesDisabled;
+    private int mChildModeSnapshotPlaybackMode;
+    private boolean mHasChildModeSnapshot;
     private final Runnable mPersistStateInt = this::persistStateInt;
 
     private GeneralData(Context context) {
@@ -530,6 +537,51 @@ public class GeneralData implements ProfileChangeListener {
         persistState();
     }
 
+    public int getChildModeSnapshotTopButtons() {
+        return mChildModeSnapshotTopButtons;
+    }
+
+    public long getChildModeSnapshotMenuItems() {
+        return mChildModeSnapshotMenuItems;
+    }
+
+    public int getChildModeSnapshotPlayerButtons() {
+        return mChildModeSnapshotPlayerButtons;
+    }
+
+    public boolean isChildModeSnapshotSuggestionsDisabled() {
+        return mChildModeSnapshotSuggestionsDisabled;
+    }
+
+    public boolean isChildModeSnapshotPopularSearchesDisabled() {
+        return mChildModeSnapshotPopularSearchesDisabled;
+    }
+
+    public int getChildModeSnapshotPlaybackMode() {
+        return mChildModeSnapshotPlaybackMode;
+    }
+
+    public boolean hasChildModeSnapshot() {
+        return mHasChildModeSnapshot;
+    }
+
+    public void saveChildModeSnapshot(int topButtons, long menuItems, int playerButtons,
+                                      boolean suggestionsDisabled, boolean popularSearchesDisabled, int playbackMode) {
+        mChildModeSnapshotTopButtons = topButtons;
+        mChildModeSnapshotMenuItems = menuItems;
+        mChildModeSnapshotPlayerButtons = playerButtons;
+        mChildModeSnapshotSuggestionsDisabled = suggestionsDisabled;
+        mChildModeSnapshotPopularSearchesDisabled = popularSearchesDisabled;
+        mChildModeSnapshotPlaybackMode = playbackMode;
+        mHasChildModeSnapshot = true;
+        persistState();
+    }
+
+    public void clearChildModeSnapshot() {
+        mHasChildModeSnapshot = false;
+        persistState();
+    }
+
     public int getDpadUpDownAction() {
         return mDpadUpDownAction;
     }
@@ -660,6 +712,13 @@ public class GeneralData implements ProfileChangeListener {
         mLocalDriveBackupFreqDays = Helpers.parseInt(split, 70, 1);
         //mIsRemapFastForwardToSpeedToggleEnabled = Helpers.parseBoolean(split, 71, false);
         mIsRemapSToSpeedToggleEnabled = Helpers.parseBoolean(split, 72, true);
+        mChildModeSnapshotTopButtons = Helpers.parseInt(split, 73, 0);
+        mChildModeSnapshotMenuItems = Helpers.parseLong(split, 74, 0);
+        mChildModeSnapshotPlayerButtons = Helpers.parseInt(split, 75, 0);
+        mChildModeSnapshotSuggestionsDisabled = Helpers.parseBoolean(split, 76, false);
+        mChildModeSnapshotPopularSearchesDisabled = Helpers.parseBoolean(split, 77, false);
+        mChildModeSnapshotPlaybackMode = Helpers.parseInt(split, 78, 0);
+        mHasChildModeSnapshot = Helpers.parseBoolean(split, 79, false);
     }
 
     public void persistNow() {
@@ -685,7 +744,8 @@ public class GeneralData implements ProfileChangeListener {
                 mIsHideWatchedFromNotificationsEnabled, mChangelog, mPlayerExitShortcut, null, mIsFullscreenModeEnabled, null,
                 mIsRememberPinnedPositionEnabled, mSelectedItems, mIsFirstUseTooltipEnabled, mIsDeviceSpecificBackupEnabled, null,
                 null, mSearchExitShortcut, mGDriveBackupFreqDays, mLocalDriveBackupFreqDays, null,
-                mIsRemapSToSpeedToggleEnabled));
+                mIsRemapSToSpeedToggleEnabled, mChildModeSnapshotTopButtons, mChildModeSnapshotMenuItems, mChildModeSnapshotPlayerButtons,
+                mChildModeSnapshotSuggestionsDisabled, mChildModeSnapshotPopularSearchesDisabled, mChildModeSnapshotPlaybackMode, mHasChildModeSnapshot));
     }
 
     @Override
