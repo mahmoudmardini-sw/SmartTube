@@ -28,6 +28,7 @@ import com.google.android.exoplayer2.source.sabr.manifest.SabrManifest;
 import com.google.android.exoplayer2.source.sabr.parser.adapter.SabrFragmentedMp4Adapter;
 import com.google.android.exoplayer2.source.sabr.parser.adapter.SabrMatroskaAdapter;
 import com.google.android.exoplayer2.source.sabr.parser.SabrStream;
+import com.google.android.exoplayer2.source.sabr.parser.misc.SabrExtractorInput;
 import com.google.android.exoplayer2.source.sabr.parser.models.AudioSelector;
 import com.google.android.exoplayer2.source.sabr.parser.models.CaptionSelector;
 import com.google.android.exoplayer2.source.sabr.parser.models.FormatSelector;
@@ -330,6 +331,16 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         long periodDurationUs = representationHolder.periodDurationUs;
         boolean periodEnded = periodDurationUs != C.TIME_UNSET;
 
+        // FIX: fire ending event on a video end
+        if (periodEnded && loadPositionUs >= periodDurationUs) {
+            // No segment index in SABR, so we can't compare per-segment boundaries like stock
+            // DASH does — comparing loadPositionUs directly against periodDurationUs is the
+            // SABR equivalent. Without this, getNextChunk() keeps firing "next chunk" requests
+            // past the real end of the video forever, and the player never reaches STATE_ENDED.
+            out.endOfStream = true;
+            return;
+        }
+
         //if (representationHolder.getSegmentCount() == 0) {
         //    // The index doesn't define any segments.
         //    out.endOfStream = periodEnded;
@@ -424,6 +435,17 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     @Override
     public boolean onChunkLoadError(Chunk chunk, boolean cancelable, Exception e, long blacklistDurationMs) {
         Log.e(TAG, "Chunk load failed: " + e.getMessage());
+
+        // A reload request is not a transport failure. Handing it back as "handled" would
+        // retry the very same request at full speed. Let it fall through to the
+        // LoadErrorHandlingPolicy, which stashes the token and fails the load.
+        if (e.getMessage() != null
+                && (e.getMessage().contains(SabrExtractorInput.RELOAD_MARKER)
+                    || e.getMessage().contains(SabrExtractorInput.BACKOFF_MARKER))) {
+            Log.e(TAG, "SABR control signal, letting the error policy decide: " + e.getMessage());
+            return false;
+        }
+
         if (!cancelable) {
             return false;
         }
@@ -565,9 +587,17 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         FormatId formatId = formatSelector.getSelectedFormatId();
         int iTag = formatId != null ? formatId.getItag() : -1;
 
-        if (nexChunkIdx == -1) {
+        // FIX: seek backwards does infinite loading after 60 second but the buffer is full
+        boolean isSeek = seekTimeUs != C.TIME_UNSET; // same condition used for seekTimeUs
+        if (isSeek) {
             sabrStream.reset(iTag);
+            nexChunkIdx = -1; // or whatever "post-init" value newMediaChunk expects
         }
+
+        // Old code
+        //if (nexChunkIdx == -1) {
+        //    sabrStream.reset(iTag);
+        //}
 
         nexChunkIdx++;
 
