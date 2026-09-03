@@ -6,7 +6,10 @@
     android:layout_gravity="center"
     android:gravity="center_horizontal"
     android:orientation="vertical"
-    android:padding="16sp"
+    android:paddingStart="32dp"
+    android:paddingEnd="32dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
     android:focusable="true"
     android:focusableInTouchMode="true">
 
@@ -14,98 +17,19 @@
         android:id="@+id/pin_dots_display"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="24sp"
+        android:layout_marginBottom="20dp"
         android:textColor="@color/white"
         android:textSize="32sp"
         android:fontFamily="monospace"
         android:gravity="center" />
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/pin_hint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center">
-
-        <Button
-            android:id="@+id/pin_btn_1"
-            style="@style/PinPadButton"
-            android:text="1" />
-
-        <Button
-            android:id="@+id/pin_btn_2"
-            style="@style/PinPadButton"
-            android:text="2" />
-
-        <Button
-            android:id="@+id/pin_btn_3"
-            style="@style/PinPadButton"
-            android:text="3" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center">
-
-        <Button
-            android:id="@+id/pin_btn_4"
-            style="@style/PinPadButton"
-            android:text="4" />
-
-        <Button
-            android:id="@+id/pin_btn_5"
-            style="@style/PinPadButton"
-            android:text="5" />
-
-        <Button
-            android:id="@+id/pin_btn_6"
-            style="@style/PinPadButton"
-            android:text="6" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center">
-
-        <Button
-            android:id="@+id/pin_btn_7"
-            style="@style/PinPadButton"
-            android:text="7" />
-
-        <Button
-            android:id="@+id/pin_btn_8"
-            style="@style/PinPadButton"
-            android:text="8" />
-
-        <Button
-            android:id="@+id/pin_btn_9"
-            style="@style/PinPadButton"
-            android:text="9" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center">
-
-        <Button
-            android:id="@+id/pin_btn_delete"
-            style="@style/PinPadButton"
-            android:text="⌫" />
-
-        <Button
-            android:id="@+id/pin_btn_0"
-            style="@style/PinPadButton"
-            android:text="0" />
-
-        <Button
-            android:id="@+id/pin_btn_ok"
-            style="@style/PinPadButton"
-            android:text="OK" />
-    </LinearLayout>
+        android:text="@string/pin_remote_hint"
+        android:textColor="@color/white_50"
+        android:textSize="16sp"
+        android:gravity="center" />
 
 </LinearLayout>

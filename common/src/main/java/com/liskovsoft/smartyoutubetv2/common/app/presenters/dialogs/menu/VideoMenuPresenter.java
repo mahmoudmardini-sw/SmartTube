@@ -17,6 +17,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.Com
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.manager.PlayerUI;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.service.VideoStateService;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.service.VideoStateService.State;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
@@ -30,14 +31,19 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.StreamReminderService;
 import com.liskovsoft.smartyoutubetv2.common.prefs.BlockedChannelData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.MasterPasswordData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.TimeLimitData;
 import com.liskovsoft.smartyoutubetv2.common.utils.AppDialogUtil;
+import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 import io.reactivex.Observable;
 import io.reactivex.disposables.Disposable;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -190,6 +196,8 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
             }
         }
 
+        appendChannelTimeLimitButton();
+
         if (!mDialogPresenter.isEmpty()) {
             String title = mVideo != null ? mVideo.getTitle() : null;
             // No need to add author because: 1) This could be a channel card. 2) This info isn't so important.
@@ -210,6 +218,8 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
                 menuAction.run();
             }
         }
+
+        appendChannelTimeLimitButton();
 
         if (!mDialogPresenter.isEmpty()) {
             String title = mVideo != null ? mVideo.getTitle() : null;
@@ -456,6 +466,71 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
         } else if (blockedChannelData.isEmpty()) { // hide on remove all
             BrowsePresenter.instance(getContext()).enableSection(MediaGroup.TYPE_BLOCKED_CHANNELS, false);
         }
+    }
+
+    private void appendChannelTimeLimitButton() {
+        if (mVideo == null || mVideo.isChapter) {
+            return;
+        }
+
+        String channelId = mVideo.channelId;
+        String channelName = mVideo.getAuthor();
+
+        if (channelName == null) {
+            return;
+        }
+
+        mDialogPresenter.appendSingleButton(
+                UiOptionItem.from(getContext().getString(R.string.set_channel_time_limit), optionItem -> {
+                    mDialogPresenter.closeDialog();
+
+                    // Protect the limits from the restricted (child) account.
+                    if (FamilyControlData.instance(getContext()).isFamilyControlEnabled()
+                            && MasterPasswordData.instance(getContext()).hasPin()) {
+                        SimpleEditDialog.showPassword(
+                                getContext(),
+                                getContext().getString(R.string.enter_settings_password),
+                                null,
+                                newValue -> {
+                                    if (MasterPasswordData.instance(getContext()).isPinValid(newValue)) {
+                                        showChannelTimeLimitOptions(channelId, channelName);
+                                        return true;
+                                    }
+                                    return false;
+                                });
+                    } else {
+                        showChannelTimeLimitOptions(channelId, channelName);
+                    }
+                }));
+    }
+
+    private void showChannelTimeLimitOptions(String channelId, String channelName) {
+        TimeLimitData timeLimitData = TimeLimitData.instance(getContext());
+        AppDialogPresenter dialog = AppDialogPresenter.instance(getContext());
+        List<OptionItem> options = new ArrayList<>();
+
+        int current = timeLimitData.getChannelLimitMinutes(channelId);
+
+        options.add(UiOptionItem.from(
+                getContext().getString(R.string.option_never),
+                optionItem -> {
+                    timeLimitData.removeChannelLimit(channelId, channelName);
+                    dialog.closeDialog();
+                },
+                current == 0));
+
+        for (int minutes : new int[] {10, 15, 30, 45, 60, 90, 120, 180}) {
+            options.add(UiOptionItem.from(
+                    getContext().getString(R.string.time_limit_min, Helpers.toString(minutes)),
+                    optionItem -> {
+                        timeLimitData.setChannelLimit(channelId, channelName, minutes);
+                        dialog.closeDialog();
+                    },
+                    current == minutes));
+        }
+
+        dialog.appendRadioCategory(getContext().getString(R.string.set_channel_time_limit), options);
+        dialog.showDialog(getContext().getString(R.string.set_channel_time_limit));
     }
 
     private void appendRemoveFromHistoryButton() {

@@ -22,9 +22,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_alignParentBottom="true"
-                    android:layoutDirection="ltr"
-                    android:orientation="vertical"
-                    tools:ignore="RtlHardcoded" >
+                    android:orientation="vertical" >
         <TextView android:visibility="invisible"
                   android:id="@+id/extra_text_badge"
                   android:layout_marginEnd="@dimen/lb_basic_card_info_badge_margin"

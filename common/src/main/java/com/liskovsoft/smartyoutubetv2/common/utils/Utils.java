@@ -1252,7 +1252,35 @@ public class Utils {
             return true;
         }
 
-        return original.equals(typed);
+        if (typed == null) {
+            return false;
+        }
+
+        return original.equals(typed) || original.equals(hashPin(typed));
+    }
+
+    /**
+     * One-way hash for PINs/passwords. The original value is never stored or displayed.
+     */
+    public static String hashPin(String pin) {
+        if (pin == null || pin.isEmpty()) {
+            return pin;
+        }
+
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(pin.getBytes("UTF-8"));
+
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+
+            return sb.toString();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return pin;
+        }
     }
 
     @SuppressLint("DiscouragedApi")
@@ -1283,7 +1311,7 @@ public class Utils {
             builder.setSpan(new ClickableSpan() {
                                 @Override
                                 public void onClick(@NonNull View widget) {
-                                    MessageHelpers.showMessage(context, "On link clicked " + span.getURL());
+                                    MessageHelpers.showMessage(context, context.getString(R.string.link_clicked, span.getURL()));
                                 }
                             },
                     builder.getSpanStart(span),

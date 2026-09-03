@@ -63,7 +63,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
-                android:text="Hello World!"
                 style="?attr/playbackControlsTimeStyle" />
         </LinearLayout>
     </FrameLayout>
@@ -129,6 +128,13 @@
                     android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:layout_below="@+id/quality_info"
+                    style="?attr/playbackControlsTimeStyle" />
+                <com.liskovsoft.smartyoutubetv2.tv.ui.widgets.time.WatchTimeView
+                    android:id="@+id/watch_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_below="@+id/date_time"
                     style="?attr/playbackControlsTimeStyle" />
             </RelativeLayout>
         </RelativeLayout>

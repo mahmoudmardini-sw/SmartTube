@@ -126,6 +126,7 @@ public class SimpleEditDialog {
         AlertDialog configDialog = builder
                 .setTitle(dialogTitle)
                 .setView(contentView)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> { })
                 .setNegativeButton(android.R.string.cancel, (dialog, which) -> { })
                 .create();
 
@@ -133,40 +134,20 @@ public class SimpleEditDialog {
             configDialog.setOnDismissListener(dialog -> onDismiss.run());
         }
 
-        View.OnClickListener buttonListener = v -> {
-            int id = v.getId();
-            if (id == R.id.pin_btn_delete) {
-                if (pinBuilder.length() > 0) {
-                    pinBuilder.deleteCharAt(pinBuilder.length() - 1);
-                }
-            } else if (id == R.id.pin_btn_ok) {
-                if (pinBuilder.length() > 0) {
-                    String pin = pinBuilder.toString();
-                    boolean dismiss = onChange.onChange(pin);
-                    if (dismiss) {
-                        configDialog.dismiss();
-                    }
-                }
-            } else {
-                Button btn = (Button) v;
-                String digit = btn.getText().toString();
-                if (digit != null && digit.length() == 1 && Character.isDigit(digit.charAt(0))) {
-                    pinBuilder.append(digit);
+        final Runnable submitPin = () -> {
+            if (pinBuilder.length() > 0) {
+                String pin = pinBuilder.toString();
+                boolean dismiss = onChange.onChange(pin);
+                if (dismiss) {
+                    configDialog.dismiss();
+                } else {
+                    // Wrong PIN: reset the entry so the user can retry right away.
+                    pinBuilder.setLength(0);
+                    updateDots(dotsDisplay, 0);
+                    MessageHelpers.showMessage(context, R.string.wrong_pin);
                 }
             }
-            updateDots(dotsDisplay, pinBuilder.length());
         };
-
-        int[] buttonIds = {
-                R.id.pin_btn_1, R.id.pin_btn_2, R.id.pin_btn_3,
-                R.id.pin_btn_4, R.id.pin_btn_5, R.id.pin_btn_6,
-                R.id.pin_btn_7, R.id.pin_btn_8, R.id.pin_btn_9,
-                R.id.pin_btn_delete, R.id.pin_btn_0, R.id.pin_btn_ok
-        };
-
-        for (int id : buttonIds) {
-            contentView.findViewById(id).setOnClickListener(buttonListener);
-        }
 
         contentView.setFocusable(true);
         contentView.setFocusableInTouchMode(true);
@@ -231,13 +212,7 @@ public class SimpleEditDialog {
                         return true;
                     case KeyEvent.KEYCODE_ENTER:
                     case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                        if (pinBuilder.length() > 0) {
-                            String pin = pinBuilder.toString();
-                            boolean dismiss = onChange.onChange(pin);
-                            if (dismiss) {
-                                configDialog.dismiss();
-                            }
-                        }
+                        submitPin.run();
                         return true;
                 }
             }
@@ -246,11 +221,13 @@ public class SimpleEditDialog {
 
         try {
             configDialog.show();
-            contentView.findViewById(R.id.pin_btn_1).requestFocus();
+            contentView.requestFocus();
         } catch (RuntimeException e) {
             e.printStackTrace();
             MessageHelpers.showMessage(context, e.getMessage());
         }
+
+        configDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> submitPin.run());
 
         configDialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(view -> configDialog.dismiss());
     }

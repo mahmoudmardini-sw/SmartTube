@@ -19,7 +19,7 @@
         android:layout_marginStart="10dp"
 
         android:singleLine="true"
-        android:maxWidth="150sp"
+        android:maxWidth="150dp"
         android:marqueeRepeatLimit="marquee_forever"
         android:ellipsize="marquee"
         android:scrollHorizontally="true"

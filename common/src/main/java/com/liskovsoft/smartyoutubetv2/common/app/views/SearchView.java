@@ -15,4 +15,8 @@ public interface SearchView {
     String getSearchText();
     void startVoiceRecognition();
     void finishReally();
+    /** Shows a persistent status message in the results area (e.g. "no results"). */
+    void showStatusMessage(String message);
+    /** Hides the status message shown by {@link #showStatusMessage}. */
+    void clearStatusMessage();
 }

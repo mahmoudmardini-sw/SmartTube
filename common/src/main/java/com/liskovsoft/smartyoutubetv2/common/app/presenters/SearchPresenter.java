@@ -2,9 +2,11 @@ package com.liskovsoft.smartyoutubetv2.common.app.presenters;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.text.TextUtils;
 import com.liskovsoft.mediaserviceinterfaces.ContentService;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
 import com.liskovsoft.mediaserviceinterfaces.data.SearchOptions;
+import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.sharedutils.rx.RxHelper;
 import com.liskovsoft.smartyoutubetv2.common.R;
@@ -22,6 +24,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.SearchView;
 import com.liskovsoft.smartyoutubetv2.common.misc.BrowseProcessorManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.AccountsData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.utils.AppDialogUtil;
 import io.reactivex.disposables.Disposable;
 
@@ -38,6 +41,7 @@ public class SearchPresenter extends BasePresenter<SearchView> implements VideoG
     private String mSearchText;
     private boolean mIsVoice;
     private boolean mStartPlay;
+    private boolean mHasResults;
     private int mUploadDateOptions;
     private int mDurationOptions;
     private int mTypeOptions;
@@ -173,6 +177,8 @@ public class SearchPresenter extends BasePresenter<SearchView> implements VideoG
 
         disposeActions();
         getView().showProgressBar(true);
+        getView().clearStatusMessage();
+        mHasResults = false;
 
         ContentService contentService = getContentService();
 
@@ -188,17 +194,27 @@ public class SearchPresenter extends BasePresenter<SearchView> implements VideoG
                                 startPlayFirstVideo(group);
                                 getView().updateSearch(group);
                                 mBrowseProcessor.process(group);
+
+                                if (!group.isEmpty()) {
+                                    mHasResults = true;
+                                }
                             }
                         },
                         error -> {
                             Log.e(TAG, "loadSearchData error: %s", error.getMessage());
                             if (getView() != null) {
                                 getView().showProgressBar(false);
+                                getView().showStatusMessage(getContext().getString(R.string.search_error));
                             }
                         },
                         () -> {
                             if (getView() != null) {
                                 getView().showProgressBar(false);
+
+                                // Don't show "no results" for the empty query (suggested videos on open).
+                                if (!mHasResults && !TextUtils.isEmpty(searchText)) {
+                                    getView().showStatusMessage(getContext().getString(R.string.no_search_results, searchText));
+                                }
                             }
                         }
                 );
@@ -233,6 +249,8 @@ public class SearchPresenter extends BasePresenter<SearchView> implements VideoG
                             if (getView() != null) {
                                 getView().showProgressBar(false);
                             }
+                            // Results are already on screen: a non-intrusive toast is enough.
+                            MessageHelpers.showMessage(getContext(), R.string.search_error);
                         },
                         () -> {
                             if (getView() != null) {
@@ -278,6 +296,10 @@ public class SearchPresenter extends BasePresenter<SearchView> implements VideoG
     }
 
     private void startSearch(String searchText, boolean isVoice, boolean startPlay) {
+        if (FamilyControlData.instance(getContext()).isFamilyControlEnabled()) {
+            return;
+        }
+
         mSearchText = searchText;
         mIsVoice = isVoice;
         mStartPlay = startPlay;

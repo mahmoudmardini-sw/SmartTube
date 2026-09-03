@@ -27,6 +27,7 @@ import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.KeyHelpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.helpers.PermissionHelpers;
+import com.liskovsoft.sharedutils.locale.LocaleUpdater;
 import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
 import com.liskovsoft.smartyoutubetv2.common.prefs.SearchData;
 import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
@@ -41,6 +42,7 @@ import net.gotev.speech.SpeechUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class ChannelHeaderPresenter extends RowPresenter {
     private static final String TAG = ChannelHeaderPresenter.class.getSimpleName();
@@ -356,6 +358,10 @@ public class ChannelHeaderPresenter extends RowPresenter {
         recognizerIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         if (searchBar != null && searchBar.getHint() != null) {
             recognizerIntent.putExtra(RecognizerIntent.EXTRA_PROMPT, searchBar.getHint());
+        }
+        Locale locale = LocaleUpdater.getSavedLocale(searchBar.getContext());
+        if (locale != null && !locale.getLanguage().isEmpty()) {
+            recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.getLanguage());
         }
         recognizerIntent.putExtra(EXTRA_LEANBACK_BADGE_PRESENT, mBadgeDrawable != null);
         return recognizerIntent;

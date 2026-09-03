@@ -395,7 +395,7 @@ public class MultiGridFragment extends Fragment implements BrowseSupportFragment
 
     private void updateAdapter2() {
         if (mGridViewHolder2 != null) {
-            mGridPresenter1.onBindViewHolder(mGridViewHolder2, mAdapter2);
+            mGridPresenter2.onBindViewHolder(mGridViewHolder2, mAdapter2);
             if (mSelectedPosition2 != -1) {
                 mGridViewHolder2.getGridView().setSelectedPosition(mSelectedPosition2);
             }
@@ -404,7 +404,7 @@ public class MultiGridFragment extends Fragment implements BrowseSupportFragment
 
     void setEntranceTransitionState(boolean afterTransition) {
         mGridPresenter1.setEntranceTransitionState(mGridViewHolder1, afterTransition);
-        mGridPresenter1.setEntranceTransitionState(mGridViewHolder2, afterTransition);
+        mGridPresenter2.setEntranceTransitionState(mGridViewHolder2, afterTransition);
     }
 
     class MultiGridAdapter extends Adapter<ViewHolder> {

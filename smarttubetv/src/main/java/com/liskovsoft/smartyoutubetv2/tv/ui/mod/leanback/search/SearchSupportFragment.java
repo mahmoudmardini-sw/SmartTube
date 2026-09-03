@@ -40,9 +40,12 @@ import androidx.leanback.widget.VerticalGridView;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.KeyHelpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
+import com.liskovsoft.sharedutils.locale.LocaleUpdater;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.SearchPresenter;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
+
+import java.util.Locale;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -766,6 +769,10 @@ public class SearchSupportFragment extends Fragment {
         recognizerIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         if (mSearchBar != null && mSearchBar.getHint() != null) {
             recognizerIntent.putExtra(RecognizerIntent.EXTRA_PROMPT, mSearchBar.getHint());
+        }
+        Locale locale = LocaleUpdater.getSavedLocale(getContext());
+        if (locale != null && !TextUtils.isEmpty(locale.getLanguage())) {
+            recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.getLanguage());
         }
         recognizerIntent.putExtra(EXTRA_LEANBACK_BADGE_PRESENT, mBadgeDrawable != null);
         return recognizerIntent;

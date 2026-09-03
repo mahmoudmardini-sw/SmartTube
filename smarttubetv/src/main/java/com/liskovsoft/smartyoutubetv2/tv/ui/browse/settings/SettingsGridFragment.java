@@ -12,8 +12,9 @@ import androidx.leanback.widget.VerticalGridPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsGroup;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsItem;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
-import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.MasterPasswordData;
 import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.tv.R;
@@ -118,19 +119,15 @@ public class SettingsGridFragment extends GridFragment implements SettingsSectio
         return MainUIData.instance(getContext());
     }
 
-    private GeneralData getGeneralData() {
-        return GeneralData.instance(getContext());
-    }
-
     private final class ItemViewClickedListener implements OnItemViewClickedListener {
         @Override
         public void onItemClicked(Presenter.ViewHolder itemViewHolder, Object item,
                                   RowPresenter.ViewHolder rowViewHolder, Row row) {
 
             if (item instanceof SettingsItem) {
-                String password = getGeneralData().getSettingsPassword();
+                MasterPasswordData masterPasswordData = MasterPasswordData.instance(getContext());
 
-                if (password == null) {
+                if (!FamilyControlData.instance(getContext()).isFamilyControlConfigured() || !masterPasswordData.hasPin()) {
                     ((SettingsItem) item).onClick.run();
                 } else {
                     SimpleEditDialog.showPassword(
@@ -138,7 +135,7 @@ public class SettingsGridFragment extends GridFragment implements SettingsSectio
                             getContext().getString(R.string.enter_settings_password),
                             null,
                             newValue -> {
-                                if (Utils.passwordMatch(password, newValue)) {
+                                if (masterPasswordData.isPinValid(newValue)) {
                                     ((SettingsItem) item).onClick.run();
                                     return true;
                                 }

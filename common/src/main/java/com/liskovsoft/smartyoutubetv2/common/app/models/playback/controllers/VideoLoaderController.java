@@ -22,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.VideoActionPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
@@ -132,7 +133,7 @@ public class VideoLoaderController extends BasePlayerController {
 
     @Override
     public boolean onNextClicked() {
-        if (getGeneralData().isChildModeEnabled()) {
+        if (FamilyControlData.instance(getContext()).isFamilyControlEnabled()) {
             onPlayEnd();
         } else {
             loadNext();

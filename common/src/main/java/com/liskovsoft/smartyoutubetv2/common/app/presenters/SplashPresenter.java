@@ -25,7 +25,9 @@ import com.liskovsoft.smartyoutubetv2.common.misc.LocalDriveBackupWorker;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.StreamReminderService;
 import com.liskovsoft.smartyoutubetv2.common.prefs.AccountsData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.MasterPasswordData;
 import com.liskovsoft.smartyoutubetv2.common.proxy.ProxyManager;
 import com.liskovsoft.smartyoutubetv2.common.utils.IntentExtractor;
 import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
@@ -105,6 +107,9 @@ public class SplashPresenter extends BasePresenter<SplashView> {
     }
 
     private void runPerViewTasks() {
+        // A family control pause may have expired while the app was closed.
+        FamilyControlData.instance(getContext()).checkPauseExpiry();
+
         Utils.postDelayed(mCheckForUpdates, APP_INIT_DELAY_MS);
         Utils.updateRemoteControlService(getContext());
 
@@ -123,6 +128,10 @@ public class SplashPresenter extends BasePresenter<SplashView> {
     }
 
     private void showAccountSelectionIfNeeded() {
+        if (FamilyControlData.instance(getContext()).isFamilyControlEnabled()) {
+            return;
+        }
+
         AccountSelectionPresenter.instance(getContext()).show();
     }
 
@@ -208,11 +217,16 @@ public class SplashPresenter extends BasePresenter<SplashView> {
 
         mIntentChain.add(intent -> {
             String searchText = IntentExtractor.extractSearchText(intent);
+            boolean isVoiceCommand = IntentExtractor.isStartVoiceCommand(intent);
 
-            if (searchText != null || IntentExtractor.isStartVoiceCommand(intent)) {
+            if (searchText != null || isVoiceCommand) {
                 SearchPresenter searchPresenter = SearchPresenter.instance(getContext());
                 if (IntentExtractor.isInstantPlayCommand(intent)) {
                     searchPresenter.startPlay(searchText);
+                } else if (searchText == null) {
+                    // A voice command without a query: open the search and start listening
+                    // right away (previously this only opened the keyboard).
+                    searchPresenter.startVoice();
                 } else {
                     searchPresenter.startSearch(searchText);
                 }
@@ -306,7 +320,8 @@ public class SplashPresenter extends BasePresenter<SplashView> {
 
             // For debug purpose when using ATV bridge.
             if (IntentExtractor.hasData(intent) && !IntentExtractor.isATVChannelUrl(intent) && !IntentExtractor.isRootUrl(intent)) {
-                MessageHelpers.showLongMessage(getContext(), String.format("Can't process intent: %s", Helpers.toString(intent)));
+                Log.e(TAG, "Can't process intent: %s", Helpers.toString(intent));
+                MessageHelpers.showLongMessage(getContext(), R.string.cant_process_intent);
             }
 
             return true;
@@ -330,10 +345,10 @@ public class SplashPresenter extends BasePresenter<SplashView> {
     }
 
     private void checkMasterPassword(Runnable onSuccess) {
-        String password = GeneralData.instance(getContext()).getMasterPassword();
+        MasterPasswordData masterPasswordData = MasterPasswordData.instance(getContext());
 
-        // No passwd or the app already started
-        if (password == null || getViewManager().getTopView() != null) {
+        // No lock configured or the app already started
+        if (!masterPasswordData.isLockedNow() || getViewManager().getTopView() != null) {
             onSuccess.run();
             getView().finishView(); // critical part, fix black screen on app exit
         } else {
@@ -342,7 +357,7 @@ public class SplashPresenter extends BasePresenter<SplashView> {
                     getContext().getString(R.string.enter_master_password),
                     null,
                     newValue -> {
-                        if (Utils.passwordMatch(password, newValue)) {
+                        if (masterPasswordData.isPinValid(newValue)) {
                             onSuccess.run();
                             return true;
                         }

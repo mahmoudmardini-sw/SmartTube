@@ -19,6 +19,7 @@ import com.liskovsoft.mediaserviceinterfaces.data.PlaylistInfo;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.sharedutils.rx.RxHelper;
+import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.service.VideoStateService;
@@ -507,7 +508,7 @@ public class MediaServiceManager implements OnAccountChange {
                 // NOTE: Crashes RecycleView IndexOutOfBoundsException when doing add immediately after clear
                 Utils.postDelayed(() -> ChannelPresenter.instance(context).updateRows(groups), 100);
             } else {
-                MessageHelpers.showMessage(context, "Unknown type of channel");
+                MessageHelpers.showMessage(context, R.string.unknown_channel_type);
             }
         }, error -> LoadingManager.showLoading(context, false), () -> LoadingManager.showLoading(context, false));
     }

@@ -374,7 +374,7 @@ public class GeneralData implements ProfileChangeListener {
     }
 
     public void setSettingsPassword(String password) {
-        mSettingsPassword = password;
+        mSettingsPassword = Utils.hashPin(password);
 
         persistState();
     }
@@ -384,7 +384,7 @@ public class GeneralData implements ProfileChangeListener {
     }
 
     public void setMasterPassword(String password) {
-        mMasterPassword = password;
+        mMasterPassword = Utils.hashPin(password);
 
         persistState();
     }

@@ -7,6 +7,8 @@ import android.util.Pair;
 
 import androidx.annotation.Nullable;
 
+import com.liskovsoft.sharedutils.helpers.MessageHelpers;
+
 import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
 import com.liskovsoft.sharedutils.helpers.Helpers;
@@ -42,6 +44,8 @@ import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager.AccountChangeListener;
 import com.liskovsoft.smartyoutubetv2.common.prefs.AccountsData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.BlockedChannelData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.TimeLimitData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
@@ -50,6 +54,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
@@ -60,6 +65,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
     private static final String TAG = BrowsePresenter.class.getSimpleName();
     @SuppressLint("StaticFieldLeak")
     private static BrowsePresenter sInstance;
+    private boolean mWasWatchTimeRemainingShown;
     private final List<BrowseSection> mSections;
     private final List<BrowseSection> mErrorSections;
     private final Map<Integer, Observable<MediaGroup>> mGridMapping;
@@ -118,6 +124,11 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         if (getView() == null) {
             return;
         }
+
+        // A family control pause may have expired while another view was on top.
+        FamilyControlData.instance(getContext()).checkPauseExpiry();
+
+        showWatchTimeRemainingIfNeeded();
 
         updateSections();
 
@@ -518,6 +529,14 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         mCurrentSection = section; // move current focus
         getSidebarService().moveSectionUp(section.getId());
         updateSections();
+    }
+
+    public boolean canMoveSectionUp(BrowseSection section) {
+        return getSidebarService().canMoveSectionUp(section.getId());
+    }
+
+    public boolean canMoveSectionDown(BrowseSection section) {
+        return getSidebarService().canMoveSectionDown(section.getId());
     }
 
     public void moveSectionDown(BrowseSection section) {
@@ -1019,6 +1038,30 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         return result != null ? result : previousSection;
     }
 
+    /**
+     * One-time heads-up for a restricted account: how much watch time is left today.
+     */
+    private void showWatchTimeRemainingIfNeeded() {
+        if (mWasWatchTimeRemainingShown || !FamilyControlData.instance(getContext()).isFamilyControlEnabled()) {
+            return;
+        }
+
+        TimeLimitData timeLimitData = TimeLimitData.instance(getContext());
+        long remainingSec = timeLimitData.getTotalRemainingSeconds();
+
+        if (remainingSec == Long.MAX_VALUE || remainingSec <= 0) {
+            return; // no daily limit configured or already blocked
+        }
+
+        mWasWatchTimeRemainingShown = true;
+
+        long hours = remainingSec / 3600;
+        long minutes = (remainingSec % 3600) / 60;
+        String remaining = String.format(Locale.US, "%d:%02d", hours, minutes);
+
+        MessageHelpers.showLongMessage(getContext(), getContext().getString(R.string.watch_time_remaining, remaining));
+    }
+
     private void filterHomeIfNeeded(List<MediaGroup> mediaGroups) {
         if (mediaGroups == null || !isHomeSection()) {
             return;
@@ -1032,10 +1075,17 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
                 "NBA TV", // Sports
                 "The Life of a Showgirl", // Taylor Swift ADS
                 "FIFA", // Sports (FIFA World Cup 2026™)
-                "FORMULA 1" // Sports (FORMULA 1 BRITISH GRAND PRIX)
+                "FORMULA 1", // Sports (FORMULA 1 BRITISH GRAND PRIX)
+                // The same rows under their localized (Arabic) titles, so the filter
+                // doesn't silently stop working for non-English UI languages.
+                "أخبار", // Top/Breaking news
+                "رياضة", // Sports (FIFA, Formula 1...)
+                "فورمولا", // Formula 1
+                "الدوري", // League sports rows
+                "أفلام مجانية" // Primetime (free movies and shows)
         ) || Helpers.equalsAny(
                 value.getTitle(),
-                //getContext().getString(R.string.news_row_name),
+                getContext().getString(R.string.news_row_name),
                 getContext().getString(R.string.breaking_news_row_name),
                 getContext().getString(R.string.covid_news_row_name)
         ));
@@ -1188,9 +1238,9 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         if (getView().isEmpty() || error != null) {
             ErrorFragmentData errorFragmentData;
             if (error != null && !Helpers.containsAny(error.getMessage(), "fromNullable result is null")) {
-                errorFragmentData = new CategoryEmptyError(getContext(), error);
+                errorFragmentData = new CategoryEmptyError(getContext(), error, mRefreshSection);
             } else if (getSignInService().isSigned()) {
-                errorFragmentData = new CategoryEmptyError(getContext(), null);
+                errorFragmentData = new CategoryEmptyError(getContext(), null, mRefreshSection);
             } else {
                 errorFragmentData = new SignInError(getContext());
             }

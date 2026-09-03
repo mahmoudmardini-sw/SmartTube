@@ -1,3 +1,6 @@
+plugins {
+    //id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
 include ':smarttubetv', ':common', ':chatkit', ':leanbackassistant', ':leanback-1.0.0', ':fragment-1.1.0', ':filepicker-lib', ':doubletapplayerview', ':slidableactivity'
 
 def rootDir = settingsDir

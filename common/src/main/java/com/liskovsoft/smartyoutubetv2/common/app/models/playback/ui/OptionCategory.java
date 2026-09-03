@@ -41,6 +41,10 @@ public class OptionCategory {
         return new OptionCategory(null, items, TYPE_SINGLE_BUTTON);
     }
 
+    public static OptionCategory header(CharSequence title) {
+        return new OptionCategory(title, new ArrayList<OptionItem>(), TYPE_HEADER);
+    }
+
     public static OptionCategory from(int id, int type, CharSequence title, List<OptionItem> options) {
         return new OptionCategory(title, options, type, id);
     }
@@ -68,6 +72,7 @@ public class OptionCategory {
     public static final int TYPE_LONG_TEXT = 5;
     public static final int TYPE_CHAT = 6;
     public static final int TYPE_COMMENTS = 7;
+    public static final int TYPE_HEADER = 8;
     public final int id;
     public final int type;
     public final CharSequence title;

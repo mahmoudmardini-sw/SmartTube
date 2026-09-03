@@ -9,6 +9,9 @@
     <color name="semi_red">#E52D27</color>
     <color name="light_red">#FF8080</color>
     <color name="dark_red">#B31217</color>
+    <color name="semi_green">#4CAF50</color>
+    <color name="light_green">#81C784</color>
+    <color name="dark_green">#2E7D32</color>
     <color name="transparent">#00FFFFFF</color>
     <color name="light_blue">#2793E6</color>
     <color name="electric_violet">#7300ff</color>

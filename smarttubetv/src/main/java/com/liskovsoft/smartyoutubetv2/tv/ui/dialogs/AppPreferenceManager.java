@@ -1,7 +1,9 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.dialogs;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.text.TextUtils;
+import android.util.TypedValue;
 import androidx.preference.DialogPreference;
 import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
@@ -65,9 +67,34 @@ public class AppPreferenceManager {
                 return createChatPreference(category);
             case OptionCategory.TYPE_COMMENTS:
                 return createCommentsPreference(category);
+            case OptionCategory.TYPE_HEADER:
+                return createHeaderPreference(category);
         }
 
         throw  new IllegalStateException("Can't find matched preference for type: " + category.type);
+    }
+
+    private Preference createHeaderPreference(OptionCategory category) {
+        Preference preference = new Preference(mContext);
+        preference.setPersistent(false);
+        preference.setTitle(Utils.bold(Utils.color(category.title, getAccentColor())));
+        preference.setSelectable(false);
+
+        return preference;
+    }
+
+    /**
+     * Resolves the accent color of the active theme, so section headers follow
+     * the selected color scheme (green, red, blue...).
+     */
+    private int getAccentColor() {
+        TypedValue typedValue = new TypedValue();
+
+        if (mContext.getTheme().resolveAttribute(android.R.attr.colorAccent, typedValue, true)) {
+            return typedValue.data;
+        }
+
+        return Color.WHITE;
     }
 
     private Preference createStringListPreference(OptionCategory category) {

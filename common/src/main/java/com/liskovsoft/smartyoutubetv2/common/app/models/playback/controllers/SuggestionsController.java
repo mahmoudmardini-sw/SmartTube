@@ -29,6 +29,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 import com.liskovsoft.smartyoutubetv2.common.misc.BrowseProcessorManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 import io.reactivex.Observable;
@@ -263,7 +264,7 @@ public class SuggestionsController extends BasePlayerController {
                             String message = error.getMessage();
                             Log.e(TAG, "loadSuggestions error: %s", message);
                             if (!Helpers.containsAny(message, "fromNullable result is null")) {
-                                MessageHelpers.showLongMessage(getContext(), "loadSuggestions error: %s", message);
+                                MessageHelpers.showLongMessage(getContext(), R.string.suggestions_error);
                             }
                             error.printStackTrace();
                         }
@@ -385,7 +386,7 @@ public class SuggestionsController extends BasePlayerController {
         int groupIndex = -1;
         int suggestRows = -1;
 
-        if (GeneralData.instance(getContext()).isChildModeEnabled() || getPlayerTweaksData().isSuggestionsDisabled()) {
+        if (FamilyControlData.instance(getContext()).isFamilyControlEnabled() || getPlayerTweaksData().isSuggestionsDisabled()) {
             suggestRows = video.hasPlaylist() ? 1 : 0;
         }
 

@@ -400,6 +400,12 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
                 "App.Theme.Red.Preferences",
                 mContext));
         mColorSchemes.add(new ColorScheme(
+                R.string.color_scheme_green,
+                "App.Theme.Green.Player",
+                "App.Theme.Green.Browse",
+                "App.Theme.Green.Preferences",
+                mContext));
+        mColorSchemes.add(new ColorScheme(
                 R.string.color_scheme_dark_grey_oled,
                 "App.Theme.DarkGrey.OLED.Player",
                 "App.Theme.DarkGrey.OLED.Browse",

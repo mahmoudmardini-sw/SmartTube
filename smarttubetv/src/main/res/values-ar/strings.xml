@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Strings actually referenced by the app code (PaginationAdapter end-of-grid cards).
+         The rest of the module strings are unused leanback-sample leftovers. -->
+    <string name="title_no_videos">لا توجد فيديوهات</string>
+    <string name="message_check_again">التحقق مجدداً؟</string>
+    <string name="title_oops">عذراً</string>
+    <string name="message_try_again">المحاولة مجدداً؟</string>
+</resources>

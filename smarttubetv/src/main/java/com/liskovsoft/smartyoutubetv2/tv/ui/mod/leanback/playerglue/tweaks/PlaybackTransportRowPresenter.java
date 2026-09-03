@@ -93,6 +93,7 @@ public class PlaybackTransportRowPresenter extends PlaybackRowPresenter {
         final TextView mEndingTime;
         final TextView mQualityInfo;
         final TextView mDateTime;
+        final TextView mWatchTime;
         final ViewGroup mAdditionalInfo;
         final ViewGroup mTimeInfo;
         final ViewGroup mTopEdge;
@@ -437,6 +438,7 @@ public class PlaybackTransportRowPresenter extends PlaybackRowPresenter {
             mTotalTime = (TextView) rootView.findViewById(R.id.total_time);
             mQualityInfo = (TextView) rootView.findViewById(com.liskovsoft.smartyoutubetv2.tv.R.id.quality_info);
             mDateTime = (TextView) rootView.findViewById(com.liskovsoft.smartyoutubetv2.tv.R.id.date_time);
+            mWatchTime = (TextView) rootView.findViewById(com.liskovsoft.smartyoutubetv2.tv.R.id.watch_time);
             mEndingTime = (TextView) rootView.findViewById(com.liskovsoft.smartyoutubetv2.tv.R.id.ending_time);
             mEndingTimeFormat = rootView.getContext().getString(com.liskovsoft.smartyoutubetv2.tv.R.string.player_ending_time);
             mRemainingTimeFormat = rootView.getContext().getString(com.liskovsoft.smartyoutubetv2.tv.R.string.player_remaining_time);
@@ -793,10 +795,18 @@ public class PlaybackTransportRowPresenter extends PlaybackRowPresenter {
         }
 
         void setDateVisibility(boolean isVisible) {
-            if (mPlayerData.isClockEnabled()) {
+            if (isVisible && mPlayerData.isClockEnabled()) {
                 mDateTime.setVisibility(View.VISIBLE);
             } else {
                 mDateTime.setVisibility(View.GONE);
+            }
+
+            // The watch-time badge isn't tied to the clock setting: it hides itself
+            // via its own tick when family control/time limits don't apply.
+            if (isVisible) {
+                mWatchTime.setVisibility(View.VISIBLE);
+            } else {
+                mWatchTime.setVisibility(View.GONE);
             }
         }
 

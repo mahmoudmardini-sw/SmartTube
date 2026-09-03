@@ -1,8 +1,9 @@
 apply from: gradle.ext.sharedModulesConstants
-apply plugin: 'kotlin-android'
 apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
 
 android {
+    namespace 'com.liskovsoft.smartyoutubetv2.common'
     // FIX: Default interface methods are only supported starting with Android N (--min-api 24)
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8

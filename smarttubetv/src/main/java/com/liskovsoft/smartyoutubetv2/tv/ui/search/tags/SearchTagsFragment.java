@@ -1,7 +1,6 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.search.tags;
 
 import android.os.Bundle;
-import android.speech.SpeechRecognizer;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -126,6 +125,7 @@ public class SearchTagsFragment extends SearchTagsFragmentBase {
     @Override
     public void clearSearch() {
         mSearchQuery = null;
+        clearStatusMessage();
 
         for (VideoGroupObjectAdapter adapter : mSearchGroupAdapters.values()) {
             adapter.clear();
@@ -303,7 +303,7 @@ public class SearchTagsFragment extends SearchTagsFragmentBase {
             // Show suggested videos on empty search
             loadSearchResult("");
 
-            if (enableRecognition && isRecognitionAvailable()) {
+            if (enableRecognition) {
                 startRecognition();
             } else {
                 focusOnSearchField();
@@ -313,15 +313,6 @@ public class SearchTagsFragment extends SearchTagsFragmentBase {
         if (getRowsSupportFragment() != null) {
             // Move selection to the top
             getRowsSupportFragment().setSelectedPosition(0);
-        }
-    }
-
-    private boolean isRecognitionAvailable() {
-        try {
-            return SpeechRecognizer.isRecognitionAvailable(getContext());
-        } catch (NullPointerException e) {
-            // Attempt to invoke virtual method 'android.content.pm.PackageManager android.content.Context.getPackageManager()' on a null object reference
-            return false;
         }
     }
 

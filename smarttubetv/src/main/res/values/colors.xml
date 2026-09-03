@@ -42,6 +42,12 @@
     <color name="scheme_red_shelf_background_dark">#131313</color>
     <color name="scheme_red_card_background_dark">#36474f</color>
 
+    <!-- Green color scheme -->
+    <color name="scheme_green_background">#131313</color>
+    <color name="scheme_green_background_dark">@color/dark_green</color>
+    <color name="scheme_green_shelf_background_dark">#131313</color>
+    <color name="scheme_green_card_background_dark">#314030</color>
+
     <!-- Blue color scheme -->
     <color name="scheme_blue_background">#33B5E5</color>
     <color name="scheme_blue_background_dark">#207EA1</color>

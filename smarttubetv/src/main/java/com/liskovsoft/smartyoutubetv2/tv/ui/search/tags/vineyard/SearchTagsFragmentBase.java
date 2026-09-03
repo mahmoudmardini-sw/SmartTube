@@ -4,9 +4,13 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Bundle;
+import android.speech.SpeechRecognizer;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 import androidx.leanback.app.RowsSupportFragment;
 import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.HeaderItem;
@@ -55,6 +59,7 @@ public abstract class SearchTagsFragmentBase extends SearchSupportFragment
     private boolean mIsStopping;
     private SearchTagsProvider mSearchTagsProvider;
     private ProgressBarManager mProgressBarManager;
+    private TextView mStatusMessageView;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -75,8 +80,41 @@ public abstract class SearchTagsFragmentBase extends SearchSupportFragment
         View root = super.onCreateView(inflater, container, savedInstanceState);
 
         mProgressBarManager.setRootView((ViewGroup) root);
+        addStatusMessageView((ViewGroup) root);
 
         return root;
+    }
+
+    /**
+     * Persistent inline message in the results area (e.g. "no results found").
+     * Implemented as an overlay outside the rows adapter, so leanback focus/navigation
+     * stays untouched. Only shown when the results area is empty anyway.
+     */
+    private void addStatusMessageView(ViewGroup root) {
+        mStatusMessageView = new TextView(getContext());
+        mStatusMessageView.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+        mStatusMessageView.setTextSize(20);
+        mStatusMessageView.setTextColor(0xB3FFFFFF); // secondary white, matches leanback dim colors
+        mStatusMessageView.setGravity(Gravity.CENTER);
+        mStatusMessageView.setFocusable(false);
+        mStatusMessageView.setVisibility(View.GONE);
+        root.addView(mStatusMessageView);
+    }
+
+    @Override
+    public void showStatusMessage(String message) {
+        if (mStatusMessageView != null) {
+            mStatusMessageView.setText(message);
+            mStatusMessageView.setVisibility(View.VISIBLE);
+        }
+    }
+
+    @Override
+    public void clearStatusMessage() {
+        if (mStatusMessageView != null) {
+            mStatusMessageView.setVisibility(View.GONE);
+        }
     }
 
     @Override
@@ -157,12 +195,10 @@ public abstract class SearchTagsFragmentBase extends SearchSupportFragment
 
         switch (getSearchData().getSpeechRecognizerType()) {
             case SearchData.SPEECH_RECOGNIZER_SYSTEM:
-                // Don't uncomment. Sometimes system recognizer works on lower api
-                // Do nothing unless we have old api.
-                // Internal recognizer needs API >= 23. See: androidx.leanback.widget.SearchBar.startRecognition()
-                //if (Build.VERSION.SDK_INT < 23) {
-                //    setSpeechRecognitionCallback(mDefaultCallback);
-                //}
+                // Fall back to the external recognizer when the system one isn't available on this device.
+                if (!isSystemRecognitionAvailable()) {
+                    setSpeechRecognitionCallback(mDefaultCallback);
+                }
                 break;
             case SearchData.SPEECH_RECOGNIZER_INTENT:
                 setSpeechRecognitionCallback(mDefaultCallback);
@@ -171,6 +207,14 @@ public abstract class SearchTagsFragmentBase extends SearchSupportFragment
                 Speech.init(getContext());
                 setSpeechRecognitionCallback(mGotevCallback);
                 break;
+        }
+    }
+
+    private boolean isSystemRecognitionAvailable() {
+        try {
+            return SpeechRecognizer.isRecognitionAvailable(getContext());
+        } catch (NullPointerException e) {
+            return false;
         }
     }
 
@@ -312,8 +356,10 @@ public abstract class SearchTagsFragmentBase extends SearchSupportFragment
                 startActivityForResult(getRecognizerIntent(), REQUEST_SPEECH);
             } catch (ActivityNotFoundException e) {
                 Log.e(TAG, "Cannot find activity for speech recognizer", e);
+                MessageHelpers.showMessage(getContext(), R.string.speech_not_available);
             } catch (NullPointerException e) {
                 Log.e(TAG, "Speech recognizer can't obtain applicationInfo", e);
+                MessageHelpers.showMessage(getContext(), R.string.speech_not_available);
             }
         } else {
             Log.e(TAG, "Can't perform search. Fragment is detached.");

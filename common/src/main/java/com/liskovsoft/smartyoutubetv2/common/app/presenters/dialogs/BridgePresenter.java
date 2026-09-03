@@ -128,7 +128,7 @@ abstract class BridgePresenter extends BasePresenter<Void> implements MotherActi
         if (requestCode == Helpers.REMOVE_PACKAGE_CODE && !isOldApkInstalled()) {
             installBridgeFromPath(getContext());
         } else {
-            MessageHelpers.showMessage(getContext(), "The package " + getPackageName() + " cannot be uninstalled!");
+            MessageHelpers.showMessage(getContext(), getContext().getString(R.string.package_cant_uninstall, getPackageName()));
         }
     }
 

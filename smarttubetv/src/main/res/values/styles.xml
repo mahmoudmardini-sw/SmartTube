@@ -248,4 +248,31 @@
         <item name="cardSelectedBackground">@color/card_selected_background_white_grey</item>
     </style>
     <!--  End Color scheme: Dark Blue (OLED)  -->
+
+    <!--  Color scheme: Green  -->
+    <style name="App.Theme.Green.Player" parent="App.Theme.Leanback.Player">
+        <item name="playbackProgressPrimaryColor">@color/semi_green</item>
+        <item name="playbackProgressSecondaryColor">@color/light_green</item>
+        <item name="playbackControlsIconHighlightColor">@color/semi_green</item>
+        <item name="cardProgressStyle">@style/ProgressBarHorizontal.Green</item>
+        <item name="shelfBackground">@color/scheme_green_shelf_background_dark</item>
+        <item name="cardDefaultBackground">@color/scheme_green_card_background_dark</item>
+        <item name="android:colorAccent" tools:targetApi="21">@color/semi_green</item>
+    </style>
+    <style name="App.Theme.Green.Browse" parent="App.Theme.Leanback.Browse">
+        <item name="android:windowBackground">@color/scheme_green_shelf_background_dark</item>
+        <item name="brandColor">@color/scheme_green_background_dark</item>
+        <item name="brandAccentColor">@color/semi_green</item>
+        <item name="cardProgressStyle">@style/ProgressBarHorizontal.Green</item>
+        <item name="shelfBackground">@color/scheme_green_shelf_background_dark</item>
+        <item name="cardDefaultBackground">@color/scheme_green_card_background_dark</item>
+    </style>
+    <style name="App.Theme.Green.Preferences" parent="App.Theme.Leanback.Preferences">
+        <item name="android:colorPrimary" tools:targetApi="21">@color/scheme_green_background_dark</item>
+        <item name="android:colorAccent" tools:targetApi="21">@color/semi_green</item>
+    </style>
+    <style name="ProgressBarHorizontal.Green" parent="@android:style/Widget.ProgressBar.Horizontal">
+        <item name="android:progressDrawable">@drawable/progress_bar_semi_green</item>
+    </style>
+    <!--  End Color scheme: Green  -->
 </resources>

@@ -21,6 +21,8 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     private static final String STATE_UPDATER_DATA = "state_updater_data";
     private static final String CHANNEL_GROUP_DATA = "channel_group_data";
     private static final String SIDEBAR_DATA = "sidebar_data";
+    private static final String FAMILY_CONTROL_DATA = "family_control_data";
+    private static final String TIME_LIMIT_DATA = "time_limit_data";
     private static final String VIEW_MANAGER_DATA = "view_manager_data";
     private static final String WEB_PROXY_URI = "web_proxy_uri";
     private static final String WEB_PROXY_ENABLED = "web_proxy_enabled";
@@ -141,6 +143,26 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     public void setSidebarData(String data) {
         // Always use multiple profiles
         setData(getProfileKey(SIDEBAR_DATA,  true), data);
+    }
+
+    public String getFamilyControlData() {
+        // Always use multiple profiles
+        return getData(getProfileKey(FAMILY_CONTROL_DATA, true));
+    }
+
+    public void setFamilyControlData(String data) {
+        // Always use multiple profiles
+        setData(getProfileKey(FAMILY_CONTROL_DATA, true), data);
+    }
+
+    public String getTimeLimitData() {
+        // Always use multiple profiles
+        return getData(getProfileKey(TIME_LIMIT_DATA, true));
+    }
+
+    public void setTimeLimitData(String data) {
+        // Always use multiple profiles
+        setData(getProfileKey(TIME_LIMIT_DATA, true), data);
     }
 
     public String getProfileData(String key) {

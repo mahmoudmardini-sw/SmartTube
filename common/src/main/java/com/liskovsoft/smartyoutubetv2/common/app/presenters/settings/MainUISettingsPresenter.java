@@ -2,6 +2,8 @@ package com.liskovsoft.smartyoutubetv2.common.app.presenters.settings;
 
 import android.content.Context;
 import android.os.Build;
+import android.util.TypedValue;
+import android.view.ContextThemeWrapper;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.smartyoutubetv2.common.R;
@@ -16,6 +18,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData.ColorScheme;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.ClickbaitRemover;
+import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -99,7 +102,7 @@ public class MainUISettingsPresenter extends BasePresenter<Void> {
 
         for (ColorScheme colorScheme : colorSchemes) {
             styleOptions.add(UiOptionItem.from(
-                    getContext().getString(colorScheme.nameResId),
+                    colorDot(colorScheme) + " " + getContext().getString(colorScheme.nameResId),
                     option -> {
                         mMainUIData.setColorScheme(colorScheme);
                         mRestartApp = true;
@@ -108,6 +111,20 @@ public class MainUISettingsPresenter extends BasePresenter<Void> {
         }
 
         return styleOptions;
+    }
+
+    /**
+     * Colored dot previewing the scheme's accent color, resolved from the scheme's own theme.
+     */
+    private CharSequence colorDot(ColorScheme colorScheme) {
+        Context themedContext = new ContextThemeWrapper(getContext(), colorScheme.browseThemeResId);
+        TypedValue typedValue = new TypedValue();
+
+        if (themedContext.getTheme().resolveAttribute(android.R.attr.colorAccent, typedValue, true)) {
+            return Utils.color("● ", typedValue.data);
+        }
+
+        return "";
     }
 
     private void appendCardPreviews(AppDialogPresenter settingsPresenter) {

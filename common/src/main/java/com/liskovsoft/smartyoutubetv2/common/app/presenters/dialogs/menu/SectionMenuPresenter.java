@@ -14,12 +14,14 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.SidebarArrangePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.VideoMenuPresenter.MenuAction;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.VideoMenuPresenter.VideoMenuCallback;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.providers.ContextMenuManager;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.providers.ContextMenuProvider;
 import com.liskovsoft.smartyoutubetv2.common.app.views.SplashView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
 
@@ -35,7 +37,8 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
     private boolean mIsReturnToBackgroundVideoEnabled;
     private boolean mIsMarkAllChannelsWatchedEnabled;
     private boolean mIsRefreshEnabled;
-    private boolean mIsMoveSectionEnabled;
+    private boolean mIsMoveUpEnabled;
+    private boolean mIsMoveDownEnabled;
     private boolean mIsRenameSectionEnabled;
     private final Map<Long, MenuAction> mMenuMapping = new HashMap<>();
 
@@ -92,6 +95,7 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
             return;
         }
 
+        appendArrangeSidebarButton();
         appendReturnToBackgroundVideoButton();
         appendRefreshButton();
         appendUnpinVideoFromSidebarButton();
@@ -104,6 +108,7 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
         appendToggleHistoryButton();
         appendClearHistoryButton();
         appendUpdateCheckButton();
+        appendResumeFamilyControlButton();
 
         for (Long menuItem : MainUIData.instance(getContext()).getMenuItemsOrdered()) {
             MenuAction menuAction = mMenuMapping.get(menuItem);
@@ -123,6 +128,7 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
             return;
         }
 
+        appendArrangeSidebarButton();
         appendReturnToBackgroundVideoButton();
         appendRefreshButton();
         appendUnpinVideoFromSidebarButton();
@@ -131,6 +137,7 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
         appendMoveSectionButton();
         appendRenameSectionButton();
         appendClearHistoryButton();
+        appendResumeFamilyControlButton();
 
         for (Long menuItem : MainUIData.instance(getContext()).getMenuItemsOrdered()) {
             MenuAction menuAction = mMenuMapping.get(menuItem);
@@ -164,26 +171,53 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
                 }));
     }
 
-    private void appendMoveSectionButton() {
-        if (!mIsMoveSectionEnabled) {
+    /**
+     * Ends an active family-control pause from any screen. No PIN needed:
+     * restoring restrictions can't benefit the child, only pausing requires one.
+     */
+    private void appendResumeFamilyControlButton() {
+        FamilyControlData familyControl = FamilyControlData.instance(getContext());
+
+        if (!familyControl.isPauseActive()) {
             return;
         }
 
+        mDialogPresenter.appendSingleButton(
+                UiOptionItem.from(getContext().getString(R.string.cancel_pause), optionItem -> {
+                    mDialogPresenter.closeDialog();
+                    familyControl.cancelPause();
+                }));
+    }
+
+    /**
+     * One-stop sidebar management: reorder, rename, remove, hide/show sections.
+     */
+    private void appendArrangeSidebarButton() {
+        mDialogPresenter.appendSingleButton(
+                UiOptionItem.from(getContext().getString(R.string.arrange_sidebar), optionItem -> {
+                    mDialogPresenter.closeDialog();
+                    SidebarArrangePresenter.instance(getContext()).show();
+                }));
+    }
+
+    private void appendMoveSectionButton() {
         if (mSection == null) {
             return;
         }
 
-        mDialogPresenter.appendSingleButton(
-                UiOptionItem.from(getContext().getString(R.string.move_section_up), optionItem -> {
-                    //mDialogPresenter.closeDialog();
-                    BrowsePresenter.instance(getContext()).moveSectionUp(mSection);
-                }));
+        if (mIsMoveUpEnabled && BrowsePresenter.instance(getContext()).canMoveSectionUp(mSection)) {
+            mDialogPresenter.appendSingleButton(
+                    UiOptionItem.from(getContext().getString(R.string.move_section_up), optionItem -> {
+                        BrowsePresenter.instance(getContext()).moveSectionUp(mSection);
+                    }));
+        }
 
-        mDialogPresenter.appendSingleButton(
-                UiOptionItem.from(getContext().getString(R.string.move_section_down), optionItem -> {
-                    //mDialogPresenter.closeDialog();
-                    BrowsePresenter.instance(getContext()).moveSectionDown(mSection);
-                }));
+        if (mIsMoveDownEnabled && BrowsePresenter.instance(getContext()).canMoveSectionDown(mSection)) {
+            mDialogPresenter.appendSingleButton(
+                    UiOptionItem.from(getContext().getString(R.string.move_section_down), optionItem -> {
+                        BrowsePresenter.instance(getContext()).moveSectionDown(mSection);
+                    }));
+        }
     }
 
     private void appendRenameSectionButton() {
@@ -276,13 +310,13 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
         mIsReturnToBackgroundVideoEnabled = true;
         mIsRefreshEnabled = true;
         mIsMarkAllChannelsWatchedEnabled = true;
-        mIsMoveSectionEnabled = true;
         mIsRenameSectionEnabled = true;
 
         MainUIData mainUIData = MainUIData.instance(getContext());
 
-        mIsMoveSectionEnabled = mainUIData.isMenuItemEnabled(MainUIData.MENU_ITEM_MOVE_SECTION_UP);
-        mIsMoveSectionEnabled = mainUIData.isMenuItemEnabled(MainUIData.MENU_ITEM_MOVE_SECTION_DOWN);
+        // NOTE: two separate flags — a shared one made both buttons follow a single setting.
+        mIsMoveUpEnabled = mainUIData.isMenuItemEnabled(MainUIData.MENU_ITEM_MOVE_SECTION_UP);
+        mIsMoveDownEnabled = mainUIData.isMenuItemEnabled(MainUIData.MENU_ITEM_MOVE_SECTION_DOWN);
         mIsRenameSectionEnabled = mainUIData.isMenuItemEnabled(MainUIData.MENU_ITEM_RENAME_SECTION);
     }
 

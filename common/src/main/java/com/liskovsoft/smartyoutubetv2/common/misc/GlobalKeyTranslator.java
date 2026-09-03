@@ -5,6 +5,7 @@ import android.view.KeyEvent;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.SearchPresenter;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 
 import java.util.Map;
 
@@ -50,11 +51,19 @@ public class GlobalKeyTranslator extends KeyTranslator {
     }
 
     private void addSearchAction() {
+        if (FamilyControlData.instance(mContext).isFamilyControlEnabled()) {
+            return;
+        }
+
         Runnable searchAction = () -> getSearchPresenter().startSearch(null);
+        // Mic buttons on most remotes: start voice search directly instead of doing nothing.
+        Runnable voiceAction = () -> getSearchPresenter().startVoice();
 
         Map<Integer, Runnable> actionMapping = getActionMapping();
 
         actionMapping.put(KeyEvent.KEYCODE_AT, searchAction);
+        actionMapping.put(KeyEvent.KEYCODE_VOICE_ASSIST, voiceAction);
+        actionMapping.put(KeyEvent.KEYCODE_ASSIST, voiceAction);
 
         if (getGeneralData().getChannelUpDownAction() == GeneralData.ACTION_SEARCH) {
             actionMapping.put(KeyEvent.KEYCODE_CHANNEL_UP, searchAction);

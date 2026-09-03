@@ -41,7 +41,9 @@ public abstract class LeanbackActivity extends MotherActivity {
 
     @Override
     public boolean onSearchRequested() {
-        SearchPresenter.instance(this).startSearch(null);
+        // The remote's search key should start voice search right away
+        // (pressing back from listening leaves the keyboard available).
+        SearchPresenter.instance(this).startVoice();
         return true;
     }
 

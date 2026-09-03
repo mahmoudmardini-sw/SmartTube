@@ -133,6 +133,37 @@ public class SidebarService implements ProfileChangeListener {
         return section != null; // by default enable all pinned items
     }
 
+    /**
+     * Sidebar id of the given pinned item (its section id, or its own id for pinned channels).
+     */
+    public int getSectionId(Video item) {
+        if (item == null) {
+            return -1;
+        }
+
+        return item.sectionId == -1 ? item.getId() : item.sectionId;
+    }
+
+    /**
+     * Display title of the given pinned item: localized section title for default
+     * sections, the stored title for pinned channels/playlists.
+     */
+    public String getPinnedItemTitle(Video item) {
+        if (item == null) {
+            return "";
+        }
+
+        if (item.sectionId != -1) {
+            for (Map.Entry<Integer, Integer> entry : mDefaultSections.entrySet()) {
+                if (entry.getValue() == item.sectionId) {
+                    return mContext.getString(entry.getKey());
+                }
+            }
+        }
+
+        return item.title != null ? item.title : "";
+    }
+
     public int getSectionIndex(int sectionId) {
         // 1) Distinguish section from pinned item
         // 2) Add pinned items after the sections
@@ -225,14 +256,6 @@ public class SidebarService implements ProfileChangeListener {
 
     public boolean isSettingsSectionEnabled() {
         return mIsSettingsSectionEnabled;
-    }
-
-    private int getSectionId(Video item) {
-        if (item == null) {
-            return -1;
-        }
-
-        return item.sectionId == -1 ? item.getId() : item.sectionId;
     }
 
     private void initSections() {
