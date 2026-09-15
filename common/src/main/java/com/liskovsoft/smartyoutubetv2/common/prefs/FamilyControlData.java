@@ -22,6 +22,24 @@ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
  */
 public class FamilyControlData implements ProfileChangeListener {
     private static final String FAMILY_CONTROL_DATA = "family_control_data";
+    /**
+     * Marker written as the first field so future field additions can tell layouts apart.
+     * Data written before this marker starts directly with the enabled flag, so fields are
+     * read through {@link #readOffset}.
+     */
+    private static final String FORMAT_VERSION = "v2";
+    private static final int FIELD_ENABLED = 0;
+    private static final int FIELD_SNAPSHOT_TOP_BUTTONS = 1;
+    private static final int FIELD_SNAPSHOT_MENU_ITEMS = 2;
+    private static final int FIELD_SNAPSHOT_PLAYER_BUTTONS = 3;
+    private static final int FIELD_SNAPSHOT_SUGGESTIONS_DISABLED = 4;
+    private static final int FIELD_SNAPSHOT_POPULAR_SEARCHES_DISABLED = 5;
+    private static final int FIELD_SNAPSHOT_PLAYBACK_MODE = 6;
+    private static final int FIELD_HAS_SNAPSHOT = 7;
+    /** Added after the first release: missing in older data, which means "all sections". */
+    private static final int FIELD_SNAPSHOT_ENABLED_SECTIONS = 8;
+    /** Added after the first release: missing in older data, which means "no pause". */
+    private static final int FIELD_PAUSED_UNTIL_MS = 9;
 
     /**
      * Built-in sections toggled by family control. The order matters: bit i of the snapshot mask
@@ -289,22 +307,31 @@ public class FamilyControlData implements ProfileChangeListener {
 
         String[] split = Helpers.splitData(data);
 
-        mIsFamilyControlEnabled = Helpers.parseBoolean(split, 0, false);
-        mSnapshotTopButtons = Helpers.parseInt(split, 1, 0);
-        mSnapshotMenuItems = Helpers.parseLong(split, 2, 0);
-        mSnapshotPlayerButtons = Helpers.parseInt(split, 3, 0);
-        mSnapshotSuggestionsDisabled = Helpers.parseBoolean(split, 4, false);
-        mSnapshotPopularSearchesDisabled = Helpers.parseBoolean(split, 5, false);
-        mSnapshotPlaybackMode = Helpers.parseInt(split, 6, 0);
-        mHasSnapshot = Helpers.parseBoolean(split, 7, false);
-        // Index 8 added later: default to "all sections" for already-persisted data (legacy behavior).
-        mSnapshotEnabledSections = Helpers.parseInt(split, 8, ALL_SECTIONS_MASK);
-        // Index 9 added later: no pause for already-persisted data.
-        mPausedUntilMs = Helpers.parseLong(split, 9, 0);
+        int o = readOffset(split);
+
+        mIsFamilyControlEnabled = Helpers.parseBoolean(split, o + FIELD_ENABLED, false);
+        mSnapshotTopButtons = Helpers.parseInt(split, o + FIELD_SNAPSHOT_TOP_BUTTONS, 0);
+        mSnapshotMenuItems = Helpers.parseLong(split, o + FIELD_SNAPSHOT_MENU_ITEMS, 0);
+        mSnapshotPlayerButtons = Helpers.parseInt(split, o + FIELD_SNAPSHOT_PLAYER_BUTTONS, 0);
+        mSnapshotSuggestionsDisabled = Helpers.parseBoolean(split, o + FIELD_SNAPSHOT_SUGGESTIONS_DISABLED, false);
+        mSnapshotPopularSearchesDisabled = Helpers.parseBoolean(split, o + FIELD_SNAPSHOT_POPULAR_SEARCHES_DISABLED, false);
+        mSnapshotPlaybackMode = Helpers.parseInt(split, o + FIELD_SNAPSHOT_PLAYBACK_MODE, 0);
+        mHasSnapshot = Helpers.parseBoolean(split, o + FIELD_HAS_SNAPSHOT, false);
+        // Missing in older data: default to "all sections" (the legacy behavior).
+        mSnapshotEnabledSections = Helpers.parseInt(split, o + FIELD_SNAPSHOT_ENABLED_SECTIONS, ALL_SECTIONS_MASK);
+        // Missing in older data: default to "no pause".
+        mPausedUntilMs = Helpers.parseLong(split, o + FIELD_PAUSED_UNTIL_MS, 0);
 
         if (data == null) {
             migrateLegacyData();
         }
+    }
+
+    /**
+     * Index of the first real field: 1 for the versioned layout, 0 for data written before it.
+     */
+    private int readOffset(String[] split) {
+        return FORMAT_VERSION.equals(Helpers.parseStr(split, 0)) ? 1 : 0;
     }
 
     /**
@@ -344,7 +371,7 @@ public class FamilyControlData implements ProfileChangeListener {
 
     private void persistStateInt() {
         mPrefs.setFamilyControlData(Helpers.mergeData(
-                mIsFamilyControlEnabled, mSnapshotTopButtons, mSnapshotMenuItems, mSnapshotPlayerButtons,
+                FORMAT_VERSION, mIsFamilyControlEnabled, mSnapshotTopButtons, mSnapshotMenuItems, mSnapshotPlayerButtons,
                 mSnapshotSuggestionsDisabled, mSnapshotPopularSearchesDisabled, mSnapshotPlaybackMode, mHasSnapshot,
                 mSnapshotEnabledSections, mPausedUntilMs));
     }

@@ -22,6 +22,17 @@ import java.util.Map;
  * Daily watch time limits (only enforced inside child mode). Per-account.
  */
 public class TimeLimitData implements ProfileChangeListener {
+    /**
+     * Marker written as the first field so future field additions can tell layouts apart.
+     * Data written before it starts directly with the daily limit. A number can never be mistaken
+     * for the marker, so the offset stays reliable for every layout written so far.
+     */
+    private static final String FORMAT_VERSION = "v2";
+    private static final int FIELD_DAILY_LIMIT = 0;
+    private static final int FIELD_CHANNEL_LIMITS = 1;
+    private static final int FIELD_USAGE_DATE = 2;
+    private static final int FIELD_TOTAL_USAGE = 3;
+    private static final int FIELD_CHANNEL_USAGE = 4;
     @SuppressLint("StaticFieldLeak")
     private static TimeLimitData sInstance;
     private final AppPrefs mPrefs;
@@ -248,7 +259,7 @@ public class TimeLimitData implements ProfileChangeListener {
 
     private void persistStateInt() {
         mPrefs.setTimeLimitData(Helpers.mergeData(
-                mDailyLimitMinutes, mChannelLimits, mUsageDate, mTotalUsageSec, mChannelUsageSec));
+                FORMAT_VERSION, mDailyLimitMinutes, mChannelLimits, mUsageDate, mTotalUsageSec, mChannelUsageSec));
     }
 
     private synchronized void restoreState() {
@@ -256,11 +267,13 @@ public class TimeLimitData implements ProfileChangeListener {
 
         String[] split = Helpers.splitData(data);
 
-        mDailyLimitMinutes = Helpers.parseInt(split, 0, 0);
-        mChannelLimits = Helpers.parseList(split, 1, ChannelLimit::fromString);
-        mUsageDate = Helpers.parseStr(split, 2);
-        mTotalUsageSec = Helpers.parseLong(split, 3, 0);
-        mChannelUsageSec = Helpers.parseMap(split, 4, Helpers::parseStr, Helpers::parseLong);
+        int o = FORMAT_VERSION.equals(Helpers.parseStr(split, 0)) ? 1 : 0;
+
+        mDailyLimitMinutes = Helpers.parseInt(split, o + FIELD_DAILY_LIMIT, 0);
+        mChannelLimits = Helpers.parseList(split, o + FIELD_CHANNEL_LIMITS, ChannelLimit::fromString);
+        mUsageDate = Helpers.parseStr(split, o + FIELD_USAGE_DATE);
+        mTotalUsageSec = Helpers.parseLong(split, o + FIELD_TOTAL_USAGE, 0);
+        mChannelUsageSec = Helpers.parseMap(split, o + FIELD_CHANNEL_USAGE, Helpers::parseStr, Helpers::parseLong);
 
         if (mChannelLimits == null) {
             mChannelLimits = new ArrayList<>();
