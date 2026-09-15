@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Title band of the floating settings dialog: rounded on top to match the panel.
-     Solid color on purpose: theme attributes inside a drawable only resolve from API 21
-     (see drawable-v21/rounded_dialog_title_bg.xml, which follows the active color scheme).
-     This value is what ?attr/defaultBrandColor resolved to in a layout before API 21. -->
+     Follows the active color scheme through the theme attribute, which drawables can only
+     resolve from API 21 (the base drawable keeps a solid fallback for older devices). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners
@@ -10,5 +9,5 @@
         android:topRightRadius="16dp"
         android:bottomLeftRadius="0dp"
         android:bottomRightRadius="0dp" />
-    <solid android:color="@color/lb_default_brand_color" />
+    <solid android:color="?attr/defaultBrandColor" />
 </shape>
