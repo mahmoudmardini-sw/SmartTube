@@ -36,7 +36,6 @@ public class VideoLoaderController extends BasePlayerController {
     private Video mPendingVideo;
     private SuggestionsController mSuggestionsController;
     private ErrorFixerController mErrorFixerController;
-    private long mSleepTimerStartMs;
     private Disposable mFormatInfoAction;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
@@ -71,7 +70,6 @@ public class VideoLoaderController extends BasePlayerController {
     public void onInit() {
         mSuggestionsController = getController(SuggestionsController.class);
         mErrorFixerController = getController(ErrorFixerController.class);
-        mSleepTimerStartMs = System.currentTimeMillis();
     }
 
     @Override
@@ -104,7 +102,6 @@ public class VideoLoaderController extends BasePlayerController {
         
         loadVideo(Helpers.firstNonNull(mPendingVideo, getVideo()));
         getPlayer().setButtonState(R.id.action_repeat, getPlayerData().getPlaybackMode());
-        mSleepTimerStartMs = System.currentTimeMillis();
         mPendingVideo = null;
     }
 
@@ -197,36 +194,9 @@ public class VideoLoaderController extends BasePlayerController {
 
     @Override
     public boolean onKeyDown(int keyCode) {
-        mSleepTimerStartMs = System.currentTimeMillis();
-
-        // Remove error msg if needed
-        if (getPlayer() != null && getPlayerData().getSleepTimerHours() > 0) {
-            getPlayer().setVideo(getVideo());
-        }
-
         Utils.removeCallbacks(mRestartEngine);
 
         return false;
-    }
-
-    @Override
-    public void onTickle() {
-        checkSleepTimer();
-    }
-
-    private void checkSleepTimer() {
-        if (getPlayer() == null) {
-            return;
-        }
-
-        float sleepHours = getPlayerData().getSleepTimerHours();
-        if (sleepHours > 0 && System.currentTimeMillis() - mSleepTimerStartMs > sleepHours * 60 * 60 * 1_000) {
-            getPlayer().setPlayWhenReady(false);
-            getPlayer().setTitle(getContext().getString(R.string.player_sleep_timer)
-                    + " (" + getContext().getResources().getQuantityString(R.plurals.hours, (int) sleepHours, Helpers.toString(sleepHours)) + ")");
-            getPlayer().showOverlay(true);
-            Helpers.enableScreensaver(getActivity());
-        }
     }
 
     /**
