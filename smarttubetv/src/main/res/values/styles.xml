@@ -84,8 +84,10 @@
         <item name="preferenceTheme">@style/PreferenceThemeOverlay.v14.Leanback</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
-        <!-- AppDialogFragment background dimming -->
-        <item name="android:backgroundDimEnabled">false</item>
+        <!-- Floating panel look: dim what's behind the dialog.
+             Cleared for transparent player overlays (see ViewUtil.enableTransparentDialog). -->
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.6</item>
         <item name="android:colorAccent" tools:targetApi="21">@color/fastlane_background</item>
         <item name="android:colorPrimary" tools:targetApi="21">@color/fastlane_background_dark</item>
         <!-- Disable activity transition animations -->

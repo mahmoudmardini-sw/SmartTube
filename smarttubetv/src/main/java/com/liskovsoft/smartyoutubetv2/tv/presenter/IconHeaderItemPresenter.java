@@ -96,6 +96,18 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
     protected void onSelectLevelChanged(RowHeaderPresenter.ViewHolder holder) {
         holder.view.setAlpha(mUnselectedAlpha + holder.getSelectLevel() *
                 (1.0f - mUnselectedAlpha));
+
+        // Selected header treatment: slight scale-up + label tinted with the theme accent.
+        float selectLevel = holder.getSelectLevel();
+        holder.view.setScaleX(1.0f + 0.08f * selectLevel);
+        holder.view.setScaleY(1.0f + 0.08f * selectLevel);
+
+        TextView label = holder.view.findViewById(R.id.header_label);
+        if (label != null) {
+            label.setTextColor(selectLevel > 0.5f
+                    ? ViewUtil.getThemeAccent(holder.view.getContext())
+                    : ContextCompat.getColor(holder.view.getContext(), android.R.color.white));
+        }
     }
 
     private final RequestListener<Drawable> mErrorListener = new RequestListener<Drawable>() {

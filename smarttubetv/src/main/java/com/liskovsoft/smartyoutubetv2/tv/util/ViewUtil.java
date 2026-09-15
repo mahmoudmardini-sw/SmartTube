@@ -1,15 +1,21 @@
 package com.liskovsoft.smartyoutubetv2.tv.util;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.os.Build.VERSION;
 import android.text.Layout;
 import android.text.TextUtils.TruncateAt;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -183,6 +189,11 @@ public class ViewUtil {
             return;
         }
 
+        // Transparent overlays sit on top of live content: no dim behind them.
+        if (context instanceof android.app.Activity) {
+            ((android.app.Activity) context).getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+
         // Usually null. Present only on parent fragment.
         View mainContainer = rootView.findViewById(R.id.settings_preference_fragment_container);
         View mainFrame = rootView.findViewById(R.id.main_frame);
@@ -198,12 +209,19 @@ public class ViewUtil {
         }
         if (mainFrame instanceof LinearLayout) {
             mainFrame.setBackgroundColor(transparent);
+
+            // The floating rounded panel adds margins; transparent overlays should stay full-size.
+            ViewGroup.LayoutParams layoutParams = mainFrame.getLayoutParams();
+            if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+                ((ViewGroup.MarginLayoutParams) layoutParams).setMargins(0, 0, 0, 0);
+                mainFrame.setLayoutParams(layoutParams);
+            }
         }
         if (itemsContainer instanceof VerticalGridView) {
             // Set background for individual buttons in the list.
             // This is the only way to do this because items haven't been added yet to the container.
             ((VerticalGridView) itemsContainer).setOnChildLaidOutListener(
-                    (parent, view, position, id) -> view.setBackgroundResource(R.drawable.transparent_dialog_item_bg)
+                    (parent, view, position, id) -> view.setBackground(createFocusPill(context))
             );
         }
         if (title instanceof FrameLayout) {
@@ -280,5 +298,41 @@ public class ViewUtil {
         // 3. Add fixed internal padding to create a "safe zone" for both Latin and Japanese text
         int paddingExtra = (int) (4 * textView.getResources().getDisplayMetrics().density);
         textView.setPadding(textView.getPaddingLeft(), paddingExtra, textView.getPaddingRight(), paddingExtra);
+    }
+
+    /**
+     * Rounded focus pill tinted with the active theme accent (subtle alpha),
+     * replacing the old flat grey rectangle on focused dialog items.
+     */
+    private static Drawable createFocusPill(Context context) {
+        int radius = (int) (12 * context.getResources().getDisplayMetrics().density);
+
+        GradientDrawable focused = new GradientDrawable();
+        focused.setCornerRadius(radius);
+        focused.setColor(getThemeAccent(context));
+        focused.setAlpha(46); // ~18% tint: visible but not loud
+
+        GradientDrawable normal = new GradientDrawable();
+        normal.setCornerRadius(radius);
+        normal.setColor(Color.TRANSPARENT);
+
+        StateListDrawable background = new StateListDrawable();
+        background.addState(new int[]{android.R.attr.state_focused}, focused);
+        background.addState(new int[0], normal);
+
+        return background;
+    }
+
+    /**
+     * Accent color of the active theme (follows the selected color scheme).
+     */
+    public static int getThemeAccent(Context context) {
+        TypedValue typedValue = new TypedValue();
+
+        if (context.getTheme().resolveAttribute(android.R.attr.colorAccent, typedValue, true)) {
+            return typedValue.data;
+        }
+
+        return ContextCompat.getColor(context, R.color.semi_grey);
     }
 }

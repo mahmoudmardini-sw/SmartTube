@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@+id/layout_detail"
-        android:background="@color/primary_dark">
+        android:background="?attr/brandColor">
 
         <ImageView
             android:id="@+id/image_option"
@@ -26,7 +26,7 @@
         android:layout_alignParentBottom="true"
         android:orientation="vertical"
         android:padding="16dp"
-        android:background="@color/primary">
+        android:background="?attr/brandAccentColor">
 
         <TextView
             android:id="@+id/text_option_title"

@@ -27,4 +27,11 @@
         <item name="android:focusableInTouchMode">true</item>
         <item name="android:clickable">true</item>
     </style>
+
+    <!-- Overrides SharedModules' flat AppDialog with a rounded panel (same name wins at merge).
+         Used by SimpleEditDialog: PIN entry and text input dialogs. -->
+    <style name="AppDialog" parent="AppDialogBase">
+        <item name="android:background">@drawable/rounded_alert_dialog_bg</item>
+        <item name="android:windowBackground">@drawable/rounded_alert_dialog_bg</item>
+    </style>
 </resources>
