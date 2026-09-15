@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Empty on purpose: this is a fork. Upstream update manifests offer APKs signed
+         with a different key that fail to install (or worse, tempt users to uninstall
+         the fork first and lose their data). Point this at your own release manifest
+         JSON if you start distributing builds. -->
     <string-array name="update_urls">
-        <item>https://github.com/yuliskov/SmartTubeNext/releases/download/latest/smarttube_stable2.json</item>
     </string-array>
 </resources>
