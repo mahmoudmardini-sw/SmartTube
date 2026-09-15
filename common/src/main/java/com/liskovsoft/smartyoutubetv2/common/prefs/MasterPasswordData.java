@@ -14,6 +14,14 @@ import java.util.Calendar;
  */
 public class MasterPasswordData {
     private static final String MASTER_PASSWORD_DATA = "master_password_data";
+    /**
+     * Marker written as the first field so future field additions can tell layouts apart.
+     * Data written before this marker starts directly with the PIN hash.
+     */
+    private static final String FORMAT_VERSION = "v2";
+    /** Wrong PINs accepted before the dialog goes quiet for {@link #PIN_LOCKOUT_MS}. */
+    private static final int PIN_MAX_ATTEMPTS = 5;
+    private static final long PIN_LOCKOUT_MS = 60_000;
     @SuppressLint("StaticFieldLeak")
     private static MasterPasswordData sInstance;
     private final AppPrefs mPrefs;
@@ -22,6 +30,8 @@ public class MasterPasswordData {
     private boolean mLockEnabled;
     private int mLockStartMinutes;
     private int mLockEndMinutes;
+    private int mFailedPinAttempts;
+    private long mPinLockoutUntilMs;
 
     private MasterPasswordData(Context context) {
         mPrefs = AppPrefs.instance(context);
@@ -44,16 +54,65 @@ public class MasterPasswordData {
 
     public void setPin(String pin) {
         mPinHash = Utils.hashPin(pin);
+        mFailedPinAttempts = 0;
+        mPinLockoutUntilMs = 0;
         persistState();
     }
 
     public void clearPin() {
         mPinHash = null;
+        mFailedPinAttempts = 0;
+        mPinLockoutUntilMs = 0;
         persistState();
     }
 
+    /**
+     * Checks a typed PIN, upgrading older hash formats and throttling guessing.
+     * <p>
+     * Five wrong PINs lock the check out for a minute. The counter and the lockout are persisted,
+     * so restarting the app doesn't hand out a fresh set of attempts.
+     */
     public boolean isPinValid(String typed) {
-        return mPinHash != null && mPinHash.equals(Utils.hashPin(typed));
+        if (mPinHash == null || typed == null) {
+            return false;
+        }
+
+        if (getPinLockoutRemainingMs() > 0) {
+            return false;
+        }
+
+        if (Utils.verifyPin(mPinHash, typed)) {
+            if (Utils.isLegacyPinFormat(mPinHash)) {
+                // The plaintext PIN is only available here, so re-hash it in the current format.
+                mPinHash = Utils.hashPin(typed);
+            }
+
+            mFailedPinAttempts = 0;
+            mPinLockoutUntilMs = 0;
+            persistNow();
+
+            return true;
+        }
+
+        mFailedPinAttempts++;
+
+        if (mFailedPinAttempts >= PIN_MAX_ATTEMPTS) {
+            mFailedPinAttempts = 0;
+            mPinLockoutUntilMs = System.currentTimeMillis() + PIN_LOCKOUT_MS;
+        }
+
+        persistNow();
+
+        return false;
+    }
+
+    /**
+     * Milliseconds left before another PIN attempt is accepted, or 0 when attempts are allowed.
+     */
+    public long getPinLockoutRemainingMs() {
+        long remaining = mPinLockoutUntilMs - System.currentTimeMillis();
+
+        return remaining > 0 ? remaining : 0;
     }
 
     // App access lock
@@ -120,37 +179,23 @@ public class MasterPasswordData {
 
         String[] split = Helpers.splitData(data);
 
-        mPinHash = Helpers.parseStr(split, 0);
-        mLockEnabled = Helpers.parseBoolean(split, 1, false);
-        mLockStartMinutes = Helpers.parseInt(split, 2, 10 * 60);
-        mLockEndMinutes = Helpers.parseInt(split, 3, 18 * 60);
+        // See FORMAT_VERSION: 0 = layout without the marker, 1 = current layout.
+        int offset = FORMAT_VERSION.equals(Helpers.parseStr(split, 0)) ? 1 : 0;
+
+        mPinHash = Helpers.parseStr(split, offset);
+        mLockEnabled = Helpers.parseBoolean(split, offset + 1, false);
+        mLockStartMinutes = Helpers.parseInt(split, offset + 2, 10 * 60);
+        mLockEndMinutes = Helpers.parseInt(split, offset + 3, 18 * 60);
+        mFailedPinAttempts = Helpers.parseInt(split, offset + 4, 0);
+        mPinLockoutUntilMs = Helpers.parseLong(split, offset + 5, 0);
 
         if (data == null) {
             migrateLegacyData();
-        } else if (mPinHash != null && !isSha256Hash(mPinHash)) {
-            // Early builds stored the PIN plaintext, which makes isPinValid always fail. Normalize.
+        } else if (mPinHash != null && !Utils.isHashedPin(mPinHash)) {
+            // The earliest builds stored the PIN plaintext. Hash it, verification keeps working.
             mPinHash = Utils.hashPin(mPinHash);
             persistNow();
         }
-    }
-
-    /**
-     * SHA-256 in lowercase hex is exactly 64 hex chars. Anything else is a plaintext PIN.
-     */
-    private boolean isSha256Hash(String value) {
-        if (value.length() != 64) {
-            return false;
-        }
-
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private void migrateLegacyData() {
@@ -187,6 +232,7 @@ public class MasterPasswordData {
 
     private void persistStateInt() {
         mPrefs.setData(MASTER_PASSWORD_DATA, Helpers.mergeData(
-                mPinHash, mLockEnabled, mLockStartMinutes, mLockEndMinutes));
+                FORMAT_VERSION, mPinHash, mLockEnabled, mLockStartMinutes, mLockEndMinutes,
+                mFailedPinAttempts, mPinLockoutUntilMs));
     }
 }

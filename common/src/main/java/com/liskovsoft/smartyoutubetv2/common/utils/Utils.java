@@ -51,6 +51,7 @@ import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -96,11 +97,16 @@ import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -128,6 +134,11 @@ public class Utils {
             "global_prefs"
     };
     private static final String SUPER_PASSWD = "smarttube";
+    private static final String PBKDF2_PREFIX = "pbkdf2";
+    private static final String PBKDF2_ALGO = "PBKDF2WithHmacSHA1";
+    private static final int PBKDF2_ITERATIONS = 10_000;
+    private static final int PBKDF2_SALT_BYTES = 16;
+    private static final int PBKDF2_KEY_BITS = 256;
     private static final int RANDOM_FAIL_REPEAT_TIMES = 10;
     private static final String REMOTE_CONTROL_RECEIVER_CLASS_NAME = "com.liskovsoft.smartyoutubetv2.common.misc.RemoteControlReceiver";
     private static final String UPDATE_CHANNELS_RECEIVER_CLASS_NAME = "com.liskovsoft.leanbackassistant.channels.UpdateChannelsReceiver";
@@ -1265,11 +1276,15 @@ public class Utils {
             return false;
         }
 
-        return original.equals(typed) || original.equals(hashPin(typed));
+        return verifyPin(original, typed);
     }
 
     /**
-     * One-way hash for PINs/passwords. The original value is never stored or displayed.
+     * One-way hash for PINs/passwords, stored as
+     * {@code pbkdf2$<iterations>$<saltHex>$<hashHex>}. The original value is never stored or displayed.
+     * <p>
+     * A salted, iterated hash is used because the PIN is only a few digits: a plain SHA-256 of a
+     * 4-digit PIN can be reversed instantly from a precomputed table if the preferences file leaks.
      */
     public static String hashPin(String pin) {
         if (pin == null || pin.isEmpty()) {
@@ -1277,19 +1292,166 @@ public class Utils {
         }
 
         try {
-            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(pin.getBytes("UTF-8"));
+            byte[] salt = new byte[PBKDF2_SALT_BYTES];
+            new SecureRandom().nextBytes(salt);
 
-            StringBuilder sb = new StringBuilder(hash.length * 2);
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
+            byte[] hash = pbkdf2(pin, salt, PBKDF2_ITERATIONS);
 
-            return sb.toString();
+            return PBKDF2_PREFIX + "$" + PBKDF2_ITERATIONS + "$" + toHex(salt) + "$" + toHex(hash);
         } catch (Exception e) {
             e.printStackTrace();
             return pin;
         }
+    }
+
+    /**
+     * Whether the value is already a {@link #hashPin} result (any format this build understands),
+     * as opposed to a plaintext PIN. Use before re-hashing a stored value.
+     */
+    public static boolean isHashedPin(String value) {
+        if (value == null) {
+            return false;
+        }
+
+        return value.startsWith(PBKDF2_PREFIX + "$") || isLegacySha256Hash(value);
+    }
+
+    /**
+     * Checks a typed PIN/password against a stored value. Understands every format written by
+     * earlier builds, so old preferences keep working:
+     * salted PBKDF2, unsalted SHA-256 (hex) and plaintext.
+     */
+    public static boolean verifyPin(String stored, String typed) {
+        if (stored == null || typed == null) {
+            return false;
+        }
+
+        if (stored.startsWith(PBKDF2_PREFIX + "$")) {
+            return verifyPbkdf2(stored, typed);
+        }
+
+        if (isLegacySha256Hash(stored)) {
+            return stored.equals(hashPinLegacy(typed));
+        }
+
+        // Plaintext from the earliest builds.
+        return stored.equals(typed);
+    }
+
+    /**
+     * Whether a stored PIN/password still uses a weaker format and can be upgraded on the next
+     * successful check (see {@code MasterPasswordData.isPinValid}).
+     */
+    public static boolean isLegacyPinFormat(String value) {
+        return value != null && !value.startsWith(PBKDF2_PREFIX + "$");
+    }
+
+    private static boolean verifyPbkdf2(String stored, String typed) {
+        try {
+            String[] parts = stored.split("\\$");
+
+            if (parts.length != 4) {
+                return false;
+            }
+
+            int iterations = Integer.parseInt(parts[1]);
+            byte[] salt = fromHex(parts[2]);
+            byte[] expected = fromHex(parts[3]);
+
+            if (salt == null || expected == null) {
+                return false;
+            }
+
+            byte[] actual = pbkdf2(typed, salt, iterations);
+
+            // Constant-time compare: a length-dependent early exit would leak how much matched.
+            if (actual.length != expected.length) {
+                return false;
+            }
+
+            int diff = 0;
+            for (int i = 0; i < actual.length; i++) {
+                diff |= actual[i] ^ expected[i];
+            }
+
+            return diff == 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private static byte[] pbkdf2(String pin, byte[] salt, int iterations) throws Exception {
+        // PBKDF2WithHmacSHA1 is the only PBKDF2 the platform provides before API 26.
+        PBEKeySpec spec = new PBEKeySpec(pin.toCharArray(), salt, iterations, PBKDF2_KEY_BITS);
+
+        return SecretKeyFactory.getInstance(PBKDF2_ALGO).generateSecret(spec).getEncoded();
+    }
+
+    /**
+     * Unsalted SHA-256 in lowercase hex, as written by builds before the PIN hardening.
+     */
+    private static String hashPinLegacy(String pin) {
+        if (pin == null || pin.isEmpty()) {
+            return pin;
+        }
+
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(pin.getBytes("UTF-8"));
+
+            return toHex(hash);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return pin;
+        }
+    }
+
+    private static boolean isLegacySha256Hash(String value) {
+        if (value.length() != 64) {
+            return false;
+        }
+
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+
+        return sb.toString();
+    }
+
+    @Nullable
+    private static byte[] fromHex(String hex) {
+        if (hex == null || hex.length() % 2 != 0) {
+            return null;
+        }
+
+        byte[] result = new byte[hex.length() / 2];
+
+        for (int i = 0; i < result.length; i++) {
+            int high = Character.digit(hex.charAt(i * 2), 16);
+            int low = Character.digit(hex.charAt(i * 2 + 1), 16);
+
+            if (high < 0 || low < 0) {
+                return null;
+            }
+
+            result[i] = (byte) ((high << 4) + low);
+        }
+
+        return result;
     }
 
     @SuppressLint("DiscouragedApi")
