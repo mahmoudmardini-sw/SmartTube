@@ -49,6 +49,16 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
     }
 
     public void start(boolean forceCheck) {
+        // Fork: self-update is fully disabled (owner updates manually via APK).
+        // update_urls are empty on purpose, so there is nothing to check.
+        if (mUpdateManifestUrls == null || mUpdateManifestUrls.length == 0) {
+            if (forceCheck) {
+                LoadingManager.showLoading(getContext(), false);
+            }
+            onFinish();
+            return;
+        }
+
         mIsForceCheck = forceCheck;
 
         if (forceCheck) {

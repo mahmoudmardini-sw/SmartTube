@@ -30,14 +30,12 @@ public class BootDialogPresenter extends BasePresenter<Void> {
     //}
 
     public void start() {
-        startUpdatePresenter();
+        // Fork: self-update is fully disabled (no auto check, no update UI).
+        // Kept as a no-op so existing callers don't need changes.
     }
 
     private void startUpdatePresenter() {
-        AppUpdatePresenter updatePresenter = AppUpdatePresenter.instance(getContext());
-        //updatePresenter.setOnDone(this::startBridgePresenter);
-        updatePresenter.start(false);
-        //updatePresenter.unhold();
+        // Disabled in fork.
     }
 
     //private void startBackupPresenter() {
