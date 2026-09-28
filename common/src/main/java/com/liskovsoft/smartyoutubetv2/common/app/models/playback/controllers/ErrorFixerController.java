@@ -22,8 +22,15 @@ import java.util.List;
 public class ErrorFixerController extends BasePlayerController implements OnLongBuffering {
     private static final String TAG = ErrorFixerController.class.getSimpleName();
     private static final long STREAM_END_THRESHOLD_MS = 180_000;
+    // SABR fallback: sabr-only responses have no DASH urls to fall back to inside the same
+    // formatInfo, so the only way out is a fresh formatInfo from another client (which may
+    // return DASH) instead of looping restartEngine() on the same SABR manifest.
+    private static final int MAX_SABR_CLIENT_FALLBACKS = 3;
+    private static final int MAX_HANG_RESTARTS = 2;
     private final BufferingDetector mBufferingDetector = new BufferingDetector(this);
     private VideoLoaderController mVideoLoaderController;
+    private int mSabrErrorCount;
+    private int mHangCount;
 
     @Override
     public void onInit() {
@@ -70,8 +77,19 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             //lowerVideoQuality();
             //mVideoLoaderController.restartEngine();
 
-            // SABR may hang if the server issues a high backoffTime
-            mVideoLoaderController.restartEngine();
+            // SABR may hang if the server issues a high backoffTime. Restarting the engine
+            // on the same SABR manifest loops forever, so after a couple of restarts fetch
+            // a fresh formatInfo from another client (which may return DASH formats).
+            if (mHangCount < MAX_HANG_RESTARTS) {
+                mHangCount++;
+                mVideoLoaderController.restartEngine();
+            } else {
+                mHangCount = 0;
+                mSabrErrorCount++;
+                MessageHelpers.showLongMessage(getContext(), "Trying alternate playback client...");
+                YouTubeServiceManager.instance().switchNextClient();
+                mVideoLoaderController.reloadVideo();
+            }
         }
     }
 
@@ -91,6 +109,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onPlay() {
         mBufferingDetector.onStopBuffering();
+        mHangCount = 0;
     }
 
     @Override
@@ -101,6 +120,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onNewVideo(Video item) {
         mBufferingDetector.start();
+        mSabrErrorCount = 0;
+        mHangCount = 0;
     }
 
     @Override
@@ -136,7 +157,22 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         String errorTitle = getErrorTitle(type, rendererIndex);
         String errorMessage = errorTitle + "\n" + errorContent;
 
-        if (Helpers.startsWithAny(errorContent, "Unable to connect to")) {
+        if (isSabrError(error, errorContent)) {
+            // SABR-only stream failure (protocol error, CDN/format mismatch, poToken...).
+            // Restarting the engine reuses the same SABR manifest, so fetch a fresh
+            // formatInfo from another client instead (it may return DASH formats).
+            // VideoLoaderController already prefers DASH whenever both are present.
+            restartEngine = false;
+
+            if (mSabrErrorCount < MAX_SABR_CLIENT_FALLBACKS) {
+                mSabrErrorCount++;
+                if (!mBufferingDetector.isPlayable()) {
+                    YouTubeServiceManager.instance().switchNextClientNow();
+                } else {
+                    YouTubeServiceManager.instance().switchNextClient();
+                }
+            }
+        } else if (Helpers.startsWithAny(errorContent, "Unable to connect to")) {
             // No internet connection or WRONG DATE on the device
             // Recently this message starting to show for other unknown reasons
             if (!getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
@@ -334,6 +370,24 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private boolean isFasterDataSourceEnabled() {
         int fasterDataSource = Utils.getFasterDataSource();
         return getPlayerTweaksData().getPlayerDataSource() == fasterDataSource;
+    }
+
+    private boolean isSabrError(Throwable error, String errorContent) {
+        if (Helpers.containsAny(errorContent,
+                "SABR", "SabrStream", "Broadcast ID changed", "Server changed format",
+                "FormatId not found", "Initialized format not found", "SabrSeek",
+                "PoToken", "MediaSegmentMismatch", "backoff")) {
+            return true;
+        }
+
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            String name = cause.getClass().getSimpleName();
+            if (Helpers.containsAny(name, "Sabr", "PoToken", "MediaSegmentMismatch")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void switchNextEngine() {
