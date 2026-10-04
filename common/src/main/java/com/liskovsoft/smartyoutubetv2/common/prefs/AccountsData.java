@@ -7,6 +7,7 @@ import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager.AccountChangeListener;
+import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -72,7 +73,20 @@ public class AccountsData implements AccountChangeListener {
     }
 
     public void setAccountPassword(String password) {
-        mPasswords.put(getAccountName(), new PasswordItem(getAccountName(), password));
+        if (password == null) {
+            mPasswords.put(getAccountName(), new PasswordItem(getAccountName(), null));
+            persistState();
+            return;
+        }
+
+        // Hashed at rest; verifyPin still accepts older plaintext entries.
+        // Fail closed: never persist the plaintext when hashing fails.
+        String stored = Utils.hashPin(password);
+        if (stored == null) {
+            return;
+        }
+
+        mPasswords.put(getAccountName(), new PasswordItem(getAccountName(), stored));
 
         persistState();
     }

@@ -79,7 +79,9 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
             "main_ui_data2",
             "video_player_data",
             "video_player_tweaks_data",
-            "blocked_channel_data"
+            "blocked_channel_data",
+            "family_control_data",
+            "time_limit_data"
     };
 
     private void migrateProfileData(boolean toMultiProfiles) {
@@ -103,6 +105,8 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
             String data = getData(oldKey);
             if (data != null) {
                 setData(newKey, data);
+                // Drop the source copy: otherwise a later delete resurrects stale data.
+                deleteData(oldKey);
             }
         }
     }
@@ -147,22 +151,37 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
 
     public String getFamilyControlData() {
         // Always use multiple profiles
-        return getData(getProfileKey(FAMILY_CONTROL_DATA, true));
+        return getData(getFamilyControlDataKey());
     }
 
     public void setFamilyControlData(String data) {
         // Always use multiple profiles
-        setData(getProfileKey(FAMILY_CONTROL_DATA, true), data);
+        setData(getFamilyControlDataKey(), data);
+    }
+
+    /**
+     * Profile key resolved right now. Capture it at mutation time when the write is
+     * debounced: an account switch before the delay must not retarget the payload.
+     */
+    public String getFamilyControlDataKey() {
+        return getProfileKey(FAMILY_CONTROL_DATA, true);
     }
 
     public String getTimeLimitData() {
         // Always use multiple profiles
-        return getData(getProfileKey(TIME_LIMIT_DATA, true));
+        return getData(getTimeLimitDataKey());
     }
 
     public void setTimeLimitData(String data) {
         // Always use multiple profiles
-        setData(getProfileKey(TIME_LIMIT_DATA, true), data);
+        setData(getTimeLimitDataKey(), data);
+    }
+
+    /**
+     * Profile key resolved right now. See {@link #getFamilyControlDataKey}.
+     */
+    public String getTimeLimitDataKey() {
+        return getProfileKey(TIME_LIMIT_DATA, true);
     }
 
     public String getProfileData(String key) {
@@ -219,9 +238,9 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
 
         if (account != null) {
             if (account.getEmail() != null) {
-                profileName = account.getEmail().replace("@", "_at_").replace(".", "_");
+                profileName = sanitizeProfileName(account.getEmail());
             } else if (account.getName() != null) {
-                profileName = account.getName().replace(" ", "_");
+                profileName = sanitizeProfileName(account.getName());
             } else {
                 profileName = ANONYMOUS_PROFILE_NAME;
             }
@@ -229,7 +248,71 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
             profileName = ANONYMOUS_PROFILE_NAME;
         }
 
+        migrateProfileKeyScheme(legacyProfileName(account), profileName);
         setProfileName(profileName);
+    }
+
+    /**
+     * Old naming scheme (no hash suffix), kept only to migrate existing installs once.
+     */
+    private static String legacyProfileName(Account account) {
+        if (account != null) {
+            if (account.getEmail() != null) {
+                return account.getEmail().replace("@", "_at_").replace(".", "_");
+            } else if (account.getName() != null) {
+                return account.getName().replace(" ", "_");
+            }
+        }
+        return ANONYMOUS_PROFILE_NAME;
+    }
+
+    /**
+     * One-time move of per-profile files from the legacy key scheme to the hashed one.
+     * Without this, existing users would lose their per-account settings on update.
+     */
+    private void migrateProfileKeyScheme(String oldName, String newName) {
+        if (oldName == null || oldName.equals(newName)) {
+            return;
+        }
+
+        String[] keys = {
+                FAMILY_CONTROL_DATA, TIME_LIMIT_DATA, SIDEBAR_DATA, CHANNEL_GROUP_DATA,
+                STATE_UPDATER_DATA, "general_data", "main_ui_data2", "video_player_data",
+                "video_player_tweaks_data", "blocked_channel_data"
+        };
+
+        for (String key : keys) {
+            String oldKey = oldName + "_" + key;
+            String newKey = newName + "_" + key;
+            String oldData = getData(oldKey);
+            if (oldData != null && getData(newKey) == null) {
+                setData(newKey, oldData);
+                deleteData(oldKey);
+            }
+        }
+    }
+
+    /**
+     * Filesystem-safe profile name. A hash suffix keeps names distinct when sanitizing
+     * collides ("a.b@c.d" vs "a_b@c.d", "a b" vs "a_b").
+     */
+    private static String sanitizeProfileName(String raw) {
+        String safe = raw.replace("@", "_at_").replace(".", "_").replace(" ", "_");
+        return safe + "_" + sha1Hex(raw);
+    }
+
+    private static String sha1Hex(String value) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-1")
+                    .digest(value.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(value.hashCode());
+        }
     }
 
     private void onProfileChanged() {
@@ -263,6 +346,10 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
 
     private String getProfileKey(String key, boolean isMultiProfilesEnabled) {
         String profileName = getProfileName();
+        if (TextUtils.isEmpty(profileName) && isMultiProfilesEnabled) {
+            // Pre-login writes used to land on the bare key and get orphaned after login.
+            profileName = ANONYMOUS_PROFILE_NAME;
+        }
         if (!TextUtils.isEmpty(profileName) && isMultiProfilesEnabled) {
             key = profileName + "_" + key;
         }

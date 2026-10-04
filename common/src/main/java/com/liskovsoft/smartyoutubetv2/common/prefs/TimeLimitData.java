@@ -34,9 +34,11 @@ public class TimeLimitData implements ProfileChangeListener {
     private static final int FIELD_TOTAL_USAGE = 3;
     private static final int FIELD_CHANNEL_USAGE = 4;
     @SuppressLint("StaticFieldLeak")
-    private static TimeLimitData sInstance;
+    private static volatile TimeLimitData sInstance;
     private final AppPrefs mPrefs;
-    private final Runnable mPersistStateInt = this::persistStateInt;
+    private final Runnable mPersistPendingInt = this::persistPendingInt;
+    private String mPendingKey;
+    private String mPendingPayload;
     private int mDailyLimitMinutes;
     private List<ChannelLimit> mChannelLimits;
     private String mUsageDate;
@@ -82,6 +84,11 @@ public class TimeLimitData implements ProfileChangeListener {
 
             return super.equals(obj);
         }
+
+        @Override
+        public int hashCode() {
+            return channelId != null ? channelId.hashCode() : 0;
+        }
     }
 
     private TimeLimitData(Context context) {
@@ -92,7 +99,11 @@ public class TimeLimitData implements ProfileChangeListener {
 
     public static TimeLimitData instance(Context context) {
         if (sInstance == null) {
-            sInstance = new TimeLimitData(context.getApplicationContext());
+            synchronized (TimeLimitData.class) {
+                if (sInstance == null) {
+                    sInstance = new TimeLimitData(context.getApplicationContext());
+                }
+            }
         }
 
         return sInstance;
@@ -108,7 +119,7 @@ public class TimeLimitData implements ProfileChangeListener {
     }
 
     public void setChannelLimit(String channelId, String channelName, int limitMinutes) {
-        if (Helpers.allNulls(channelId, channelName)) {
+        if (Helpers.allNulls(channelId, channelName) || containsDelimiters(channelId) || containsDelimiters(channelName)) {
             return;
         }
 
@@ -242,24 +253,48 @@ public class TimeLimitData implements ProfileChangeListener {
         String today = new SimpleDateFormat("yyyyMMdd", Locale.US).format(new Date());
 
         if (!today.equals(mUsageDate)) {
-            mUsageDate = today;
-            mTotalUsageSec = 0;
-            mChannelUsageSec = new HashMap<>();
-            persistState();
+            synchronized (this) {
+                if (!today.equals(mUsageDate)) {
+                    mUsageDate = today;
+                    mTotalUsageSec = 0;
+                    mChannelUsageSec = new HashMap<>();
+                    persistState();
+                }
+            }
         }
     }
 
+    /**
+     * Storage delimiters must not appear inside channel fields: they'd split the record
+     * and shift the usage columns on the next load.
+     */
+    private static boolean containsDelimiters(String value) {
+        return value != null && (value.contains("%OB%") || value.contains("%AR%")
+                || value.contains("%PR%") || value.contains("&vi;"));
+    }
+
     public void persistNow() {
-        Utils.post(mPersistStateInt);
+        mPrefs.setData(mPrefs.getTimeLimitDataKey(), buildPayload());
     }
 
     private void persistState() {
-        Utils.postDelayed(mPersistStateInt, 10_000);
+        // Freeze the key and the payload now (see FamilyControlData).
+        mPendingKey = mPrefs.getTimeLimitDataKey();
+        mPendingPayload = buildPayload();
+        Utils.postDelayed(mPersistPendingInt, 10_000);
     }
 
-    private void persistStateInt() {
-        mPrefs.setTimeLimitData(Helpers.mergeData(
-                FORMAT_VERSION, mDailyLimitMinutes, mChannelLimits, mUsageDate, mTotalUsageSec, mChannelUsageSec));
+    private void persistPendingInt() {
+        if (mPendingKey != null && mPendingPayload != null) {
+            mPrefs.setData(mPendingKey, mPendingPayload);
+        }
+        mPendingKey = null;
+        mPendingPayload = null;
+    }
+
+    private String buildPayload() {
+        return Helpers.mergeData(
+                FORMAT_VERSION, mDailyLimitMinutes, mChannelLimits, mUsageDate, mTotalUsageSec, mChannelUsageSec);
     }
 
     private synchronized void restoreState() {
@@ -286,7 +321,9 @@ public class TimeLimitData implements ProfileChangeListener {
 
     @Override
     public void onProfileChanged() {
-        Utils.removeCallbacks(mPersistStateInt);
+        // Flush the old profile's pending write first instead of dropping it.
+        persistPendingInt();
+        Utils.removeCallbacks(mPersistPendingInt);
         restoreState();
     }
 }

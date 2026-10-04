@@ -117,3 +117,38 @@ the previous layout relied on positional indices only and was easy to break.
 The PIN is stored as a salted, iterated hash (`pbkdf2$<iterations>$<salt>$<hash>`, see
 `Utils.hashPin`). Older values (unsalted SHA-256 or plaintext) keep working and are upgraded to the
 current format on the next successful PIN entry. Five wrong PINs lock further attempts for a minute.
+New PINs must be at least 4 digits and not trivial (`MasterPasswordData.isPinAcceptable`).
+Security state (PIN hash, lockout counter, enable/disable/pause) is written synchronously, so a
+force-kill can't roll it back; the lockout uses the monotonic clock.
+
+## Self-update
+
+Currently **fully disabled**: `update_urls` arrays are empty in every flavor, there is no
+automatic check on startup (`SplashPresenter`), and no update UI (About screens, player menus).
+`AppUpdatePresenter.start()` is a guarded no-op, kept alive (not deleted) for the future.
+
+To enable automatic updates from this fork's own releases:
+
+1. Sign every distributed build with the **same** key (`keystore.properties`) — otherwise the
+   update can't install over the existing app.
+2. Publish a manifest JSON as a release asset, e.g. `smarttube_stable.json`:
+   ```json
+   {
+     "package": { "downloadUrl": "https://github.com/mahmoudmardini-sw/SmartTube/releases/download/<tag>/SmartTube_stable_<ver>_arm64-v8a.apk" },
+     "versionName": { "versionCode": 2447, "changelog": ["..."] }
+   }
+   ```
+   (`AppVersionChecker` compares `versionCode` against the installed build.)
+3. Point `common/src/ststable/res/values/update_urls.xml` (and `stbeta` for beta) at
+   `https://github.com/mahmoudmardini-sw/SmartTube/releases/download/latest/smarttube_stable.json`.
+4. Re-enable the call sites: the `SplashPresenter` startup check, the About screens'
+   check buttons/auto-update switches, and `BaseMenuPresenter.appendUpdateCheckButton`.
+   (`MENU_ITEM_UPDATE_CHECK = 1<<23` is still reserved in persisted profiles.)
+
+## Security hardening (2026-10)
+
+Batch review fixed: PIN change requires the current PIN + confirmation; account passwords are
+hashed at rest (no universal backdoor); `parseLong` overflow guard; atomic file writes with
+profile-key snapshotting; `YouTubeAccount` email equality scoped to page/channel + `hashCode`;
+SABR fallback budget resets per video with client rotation and a terminal no-retry state;
+family-control Next goes through the `onNextClicked` chain (incl. remote control).

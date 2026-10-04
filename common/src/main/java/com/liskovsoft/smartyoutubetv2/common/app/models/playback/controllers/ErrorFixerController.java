@@ -31,6 +31,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private VideoLoaderController mVideoLoaderController;
     private int mSabrErrorCount;
     private int mHangCount;
+    private boolean mSabrExhausted;
+    private String mLastVideoId;
 
     @Override
     public void onInit() {
@@ -72,6 +74,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 mVideoLoaderController.reloadVideo();
             }
         } else {
+            if (mSabrExhausted) {
+                return; // terminal state from a previous error: wait for a manual retry
+            }
+
             // NOTE: The bug. Avoid calling reloadVideo() after lowering the quality.
             // This will change current format to 'Disabled'. Do restartEngine() instead.
             //lowerVideoQuality();
@@ -83,12 +89,17 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             if (mHangCount < MAX_HANG_RESTARTS) {
                 mHangCount++;
                 mVideoLoaderController.restartEngine();
-            } else {
+            } else if (mSabrErrorCount < MAX_SABR_CLIENT_FALLBACKS) {
                 mHangCount = 0;
                 mSabrErrorCount++;
                 MessageHelpers.showLongMessage(getContext(), "Trying alternate playback client...");
                 YouTubeServiceManager.instance().switchNextClient();
                 mVideoLoaderController.reloadVideo();
+            } else {
+                // Budget exhausted: stop retrying instead of draining the battery on a dead manifest.
+                // The error message below still informs the user; they can retry manually.
+                mHangCount = 0;
+                mSabrExhausted = true;
             }
         }
     }
@@ -110,6 +121,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     public void onPlay() {
         mBufferingDetector.onStopBuffering();
         mHangCount = 0;
+        // Playback recovered: a later error starts from a fresh budget.
+        mSabrExhausted = false;
     }
 
     @Override
@@ -120,8 +133,16 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onNewVideo(Video item) {
         mBufferingDetector.start();
-        mSabrErrorCount = 0;
-        mHangCount = 0;
+
+        // reloadVideo() re-emits onNewVideo for the SAME video: only a real video change
+        // resets the fallback budget, otherwise the cap can never be reached.
+        String videoId = item != null ? item.videoId : null;
+        if (!Helpers.equals(videoId, mLastVideoId)) {
+            mLastVideoId = videoId;
+            mSabrErrorCount = 0;
+            mHangCount = 0;
+            mSabrExhausted = false;
+        }
     }
 
     @Override
@@ -153,26 +174,12 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private void applyEngineErrorAction(int type, int rendererIndex, Throwable error) {
         boolean restartEngine = true;
         boolean showMessage = true;
+        boolean giveUp = mSabrExhausted; // a previous error already spent the retry budget
         String errorContent = error != null ? error.getMessage() : null;
         String errorTitle = getErrorTitle(type, rendererIndex);
         String errorMessage = errorTitle + "\n" + errorContent;
 
-        if (isSabrError(error, errorContent)) {
-            // SABR-only stream failure (protocol error, CDN/format mismatch, poToken...).
-            // Restarting the engine reuses the same SABR manifest, so fetch a fresh
-            // formatInfo from another client instead (it may return DASH formats).
-            // VideoLoaderController already prefers DASH whenever both are present.
-            restartEngine = false;
-
-            if (mSabrErrorCount < MAX_SABR_CLIENT_FALLBACKS) {
-                mSabrErrorCount++;
-                if (!mBufferingDetector.isPlayable()) {
-                    YouTubeServiceManager.instance().switchNextClientNow();
-                } else {
-                    YouTubeServiceManager.instance().switchNextClient();
-                }
-            }
-        } else if (Helpers.startsWithAny(errorContent, "Unable to connect to")) {
+        if (Helpers.startsWithAny(errorContent, "Unable to connect to")) {
             // No internet connection or WRONG DATE on the device
             // Recently this message starting to show for other unknown reasons
             if (!getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
@@ -192,6 +199,25 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 getPlayerTweaksData().setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT);
             } else {
                 restartEngine = false;
+            }
+        } else if (isSabrError(error, errorContent)) {
+            // SABR-only stream failure (protocol error, CDN/format mismatch, poToken...).
+            // Restarting the engine reuses the same SABR manifest, so fetch a fresh
+            // formatInfo from another client instead (it may return DASH formats).
+            // VideoLoaderController already prefers DASH whenever both are present.
+            restartEngine = false;
+
+            if (mSabrErrorCount < MAX_SABR_CLIENT_FALLBACKS) {
+                mSabrErrorCount++;
+                if (!mBufferingDetector.isPlayable()) {
+                    YouTubeServiceManager.instance().switchNextClientNow();
+                } else {
+                    YouTubeServiceManager.instance().switchNextClient();
+                }
+            } else {
+                // Budget exhausted: inform once and stop auto-retrying.
+                mSabrExhausted = true;
+                giveUp = true;
             }
         } else if (type == PlayerEventListener.ERROR_TYPE_SOURCE && rendererIndex == PlayerEventListener.RENDERER_INDEX_UNKNOWN) {
             // NOTE: Starts with any (url deciphered incorrectly)
@@ -253,6 +279,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             if (getPlayer() != null) {
                 getPlayer().setTitle(errorContent);
             }
+        }
+
+        if (giveUp) {
+            return; // retry budget spent: leave the error on screen for a manual retry
         }
 
         if (restartEngine) {
@@ -373,13 +403,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     }
 
     private boolean isSabrError(Throwable error, String errorContent) {
-        if (Helpers.containsAny(errorContent,
-                "SABR", "SabrStream", "Broadcast ID changed", "Server changed format",
-                "FormatId not found", "Initialized format not found", "SabrSeek",
-                "PoToken", "MediaSegmentMismatch", "backoff")) {
-            return true;
-        }
-
+        // Class names are the reliable signal; message keywords only count while the
+        // current video is actually playing through SABR (generic errors may mention
+        // "backoff"/"SABR" in URLs or wrapper text).
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             String name = cause.getClass().getSimpleName();
             if (Helpers.containsAny(name, "Sabr", "PoToken", "MediaSegmentMismatch")) {
@@ -387,7 +413,14 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             }
         }
 
-        return false;
+        if (mVideoLoaderController == null || !mVideoLoaderController.isSabrActive()) {
+            return false;
+        }
+
+        return Helpers.containsAny(errorContent,
+                "SABR", "SabrStream", "Broadcast ID changed", "Server changed format",
+                "FormatId not found", "Initialized format not found", "SabrSeek",
+                "PoToken", "MediaSegmentMismatch", "backoffTime");
     }
 
     private void switchNextEngine() {

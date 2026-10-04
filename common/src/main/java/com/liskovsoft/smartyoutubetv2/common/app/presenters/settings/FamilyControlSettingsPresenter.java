@@ -142,7 +142,40 @@ public class FamilyControlSettingsPresenter extends BasePresenter<Void> {
 
         presenter.appendSingleButton(UiOptionItem.from(
                 getContext().getString(titleResId),
-                optionItem -> showPinDialog(presenter, null)));
+                optionItem -> {
+                    if (data.hasPin()) {
+                        // Changing a PIN must prove knowledge of the current one first.
+                        askCurrentPin(presenter, () -> showPinDialog(presenter, null));
+                    } else {
+                        showPinDialog(presenter, null);
+                    }
+                }));
+    }
+
+    private void askCurrentPin(AppDialogPresenter presenter, Runnable onSuccess) {
+        presenter.closeDialog();
+
+        SimpleEditDialog.showPassword(
+                getContext(),
+                getContext().getString(R.string.enter_pin),
+                null,
+                current -> {
+                    MasterPasswordData data = MasterPasswordData.instance(getContext());
+                    long lockoutSec = data.getPinLockoutRemainingMs() / 1000;
+
+                    if (lockoutSec > 0) {
+                        MessageHelpers.showMessage(getContext(), getContext().getString(
+                                R.string.pin_locked_try_later, lockoutSec));
+                        return false;
+                    }
+
+                    if (!data.isPinValid(current)) {
+                        return false; // the dialog shows "wrong PIN" and allows a retry
+                    }
+
+                    onSuccess.run();
+                    return true;
+                });
     }
 
     private void showPinDialog(AppDialogPresenter presenter, Runnable onSuccess) {
@@ -152,11 +185,29 @@ public class FamilyControlSettingsPresenter extends BasePresenter<Void> {
                 getContext(),
                 getContext().getString(R.string.set_pin),
                 null,
-                newValue -> {
-                    MasterPasswordData.instance(getContext()).setPin(newValue);
-                    if (onSuccess != null) {
-                        onSuccess.run();
+                first -> {
+                    if (!MasterPasswordData.isPinAcceptable(first)) {
+                        MessageHelpers.showMessage(getContext(), R.string.pin_too_weak);
+                        return false;
                     }
+
+                    // Second entry guards against a typo permanently locking the parent out.
+                    SimpleEditDialog.showPassword(
+                            getContext(),
+                            getContext().getString(R.string.confirm_pin),
+                            null,
+                            second -> {
+                                if (!first.equals(second)) {
+                                    MessageHelpers.showMessage(getContext(), R.string.pin_mismatch);
+                                    return false;
+                                }
+
+                                MasterPasswordData.instance(getContext()).setPin(second);
+                                if (onSuccess != null) {
+                                    onSuccess.run();
+                                }
+                                return true;
+                            });
                     return true;
                 });
     }

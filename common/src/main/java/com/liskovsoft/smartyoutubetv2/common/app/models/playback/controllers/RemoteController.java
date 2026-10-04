@@ -387,7 +387,8 @@ public class RemoteController extends BasePlayerController implements OnDataChan
             case Command.TYPE_NEXT:
                 if (getMainController() != null) {
                     movePlayerToForeground();
-                    getController(VideoLoaderController.class).loadNext();
+                    // Route through the chain so gates (e.g. family control) apply.
+                    getMainController().onNextClicked();
                 } else {
                     openNewVideo(getVideo());
                 }

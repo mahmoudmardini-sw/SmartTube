@@ -36,6 +36,9 @@ public class VideoLoaderController extends BasePlayerController {
     private Video mPendingVideo;
     private SuggestionsController mSuggestionsController;
     private ErrorFixerController mErrorFixerController;
+    // True while the current video is playing through the SABR protocol. Lets the error
+    // fixer tell genuine SABR failures apart from generic errors that merely mention SABR.
+    private boolean mIsSabrActive;
     private Disposable mFormatInfoAction;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
@@ -204,11 +207,19 @@ public class VideoLoaderController extends BasePlayerController {
      */
     private void loadVideo(Video item) {
         if (getPlayer() != null && item != null) {
+            mIsSabrActive = false; // unknown until the new formatInfo arrives
             mPlaylist.setCurrent(item);
             getPlayer().setVideo(item);
             getPlayer().resetPlayerState();
             loadFormatInfo(item);
         }
+    }
+
+    /**
+     * Whether the current video is playing through SABR (see {@link #processFormatInfo}).
+     */
+    public boolean isSabrActive() {
+        return mIsSabrActive;
     }
 
     /**
@@ -306,6 +317,7 @@ public class VideoLoaderController extends BasePlayerController {
             //}
         } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats()) {
             Log.d(TAG, "Loading regular video in dash format...");
+            mIsSabrActive = false;
 
             if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
                 player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
@@ -314,15 +326,19 @@ public class VideoLoaderController extends BasePlayerController {
             }
         } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats() && !formatInfo.isLive()) { // TODO: SABR live not implemented yet
             Log.d(TAG, "Loading video in sabr format...");
+            mIsSabrActive = true;
             player.openSabr(formatInfo);
         } else if (acceptDashLive(formatInfo)) {
             Log.d(TAG, "Loading live video (current or past live stream) in dash format...");
+            mIsSabrActive = false;
             player.openDashUrl(formatInfo.getDashManifestUrl());
         } else if (formatInfo.isLive() && formatInfo.containsHlsUrl()) {
             Log.d(TAG, "Loading live video (current or past live stream) in hls format...");
+            mIsSabrActive = false;
             player.openHlsUrl(formatInfo.getHlsManifestUrl());
         } else if (formatInfo.containsUrlFormats()) {
             Log.d(TAG, "Loading url list video. This is always LQ...");
+            mIsSabrActive = false;
             player.openUrlList(formatInfo.createUrlList());
         } else {
             Log.d(TAG, "Empty format info received. Seems future live translation. No video data to pass to the player.");

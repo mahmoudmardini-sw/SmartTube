@@ -2,6 +2,7 @@ package com.liskovsoft.smartyoutubetv2.common.prefs;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.SystemClock;
 
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
@@ -22,8 +23,10 @@ public class MasterPasswordData {
     /** Wrong PINs accepted before the dialog goes quiet for {@link #PIN_LOCKOUT_MS}. */
     private static final int PIN_MAX_ATTEMPTS = 5;
     private static final long PIN_LOCKOUT_MS = 60_000;
+    /** Minimum accepted PIN length: shorter PINs are trivially brute-forced. */
+    private static final int PIN_MIN_LENGTH = 4;
     @SuppressLint("StaticFieldLeak")
-    private static MasterPasswordData sInstance;
+    private static volatile MasterPasswordData sInstance;
     private final AppPrefs mPrefs;
     private final Runnable mPersistStateInt = this::persistStateInt;
     private String mPinHash;
@@ -40,7 +43,11 @@ public class MasterPasswordData {
 
     public static MasterPasswordData instance(Context context) {
         if (sInstance == null) {
-            sInstance = new MasterPasswordData(context.getApplicationContext());
+            synchronized (MasterPasswordData.class) {
+                if (sInstance == null) {
+                    sInstance = new MasterPasswordData(context.getApplicationContext());
+                }
+            }
         }
 
         return sInstance;
@@ -49,21 +56,55 @@ public class MasterPasswordData {
     // PIN
 
     public boolean hasPin() {
-        return mPinHash != null;
+        return mPinHash != null && !mPinHash.isEmpty();
+    }
+
+    /**
+     * Whether a candidate PIN is acceptable as a new PIN: long enough and not trivially guessable.
+     */
+    public static boolean isPinAcceptable(String pin) {
+        if (pin == null || pin.length() < PIN_MIN_LENGTH) {
+            return false;
+        }
+
+        // Reject runs of one repeated digit ("0000", "7777"...).
+        boolean allSame = true;
+        for (int i = 1; i < pin.length(); i++) {
+            if (pin.charAt(i) != pin.charAt(0)) {
+                allSame = false;
+                break;
+            }
+        }
+
+        if (allSame) {
+            return false;
+        }
+
+        return !"1234".equals(pin) && !"4321".equals(pin);
     }
 
     public void setPin(String pin) {
+        if (!isPinAcceptable(pin)) {
+            return;
+        }
+
         mPinHash = Utils.hashPin(pin);
+
+        if (mPinHash == null) {
+            // Hashing failed: fail closed instead of storing a weak value.
+            return;
+        }
+
         mFailedPinAttempts = 0;
         mPinLockoutUntilMs = 0;
-        persistState();
+        persistNow();
     }
 
     public void clearPin() {
         mPinHash = null;
         mFailedPinAttempts = 0;
         mPinLockoutUntilMs = 0;
-        persistState();
+        persistNow();
     }
 
     /**
@@ -84,7 +125,11 @@ public class MasterPasswordData {
         if (Utils.verifyPin(mPinHash, typed)) {
             if (Utils.isLegacyPinFormat(mPinHash)) {
                 // The plaintext PIN is only available here, so re-hash it in the current format.
-                mPinHash = Utils.hashPin(typed);
+                // Also upgrades older iteration counts.
+                String upgraded = Utils.hashPin(typed);
+                if (upgraded != null) {
+                    mPinHash = upgraded;
+                }
             }
 
             mFailedPinAttempts = 0;
@@ -98,7 +143,8 @@ public class MasterPasswordData {
 
         if (mFailedPinAttempts >= PIN_MAX_ATTEMPTS) {
             mFailedPinAttempts = 0;
-            mPinLockoutUntilMs = System.currentTimeMillis() + PIN_LOCKOUT_MS;
+            // Monotonic clock: changing the system clock can't shorten or skip the lockout.
+            mPinLockoutUntilMs = SystemClock.elapsedRealtime() + PIN_LOCKOUT_MS;
         }
 
         persistNow();
@@ -110,7 +156,12 @@ public class MasterPasswordData {
      * Milliseconds left before another PIN attempt is accepted, or 0 when attempts are allowed.
      */
     public long getPinLockoutRemainingMs() {
-        long remaining = mPinLockoutUntilMs - System.currentTimeMillis();
+        long remaining = mPinLockoutUntilMs - SystemClock.elapsedRealtime();
+
+        if (remaining > PIN_LOCKOUT_MS) {
+            // Corrupt or pre-fix wall-clock value: clamp instead of locking out for ages.
+            remaining = PIN_LOCKOUT_MS;
+        }
 
         return remaining > 0 ? remaining : 0;
     }
@@ -179,22 +230,32 @@ public class MasterPasswordData {
 
         String[] split = Helpers.splitData(data);
 
-        // See FORMAT_VERSION: 0 = layout without the marker, 1 = current layout.
-        int offset = FORMAT_VERSION.equals(Helpers.parseStr(split, 0)) ? 1 : 0;
+        // See FORMAT_VERSION: 1 for the versioned layout, 0 for data written before it.
+        // The marker alone isn't enough: field 0 of legacy data is a free-form PIN that could
+        // literally be "v2", so also require the full versioned field count.
+        int offset = FORMAT_VERSION.equals(Helpers.parseStr(split, 0))
+                && split != null && split.length >= 7 ? 1 : 0;
 
         mPinHash = Helpers.parseStr(split, offset);
+        if (mPinHash != null && mPinHash.isEmpty()) {
+            // Pre-hardening builds could store "": treat as "no PIN", never as a locked state.
+            mPinHash = null;
+        }
         mLockEnabled = Helpers.parseBoolean(split, offset + 1, false);
         mLockStartMinutes = Helpers.parseInt(split, offset + 2, 10 * 60);
         mLockEndMinutes = Helpers.parseInt(split, offset + 3, 18 * 60);
         mFailedPinAttempts = Helpers.parseInt(split, offset + 4, 0);
         mPinLockoutUntilMs = Helpers.parseLong(split, offset + 5, 0);
 
-        if (data == null) {
+        if (data == null || data.isEmpty()) {
             migrateLegacyData();
         } else if (mPinHash != null && !Utils.isHashedPin(mPinHash)) {
             // The earliest builds stored the PIN plaintext. Hash it, verification keeps working.
-            mPinHash = Utils.hashPin(mPinHash);
-            persistNow();
+            String hashed = Utils.hashPin(mPinHash);
+            if (hashed != null) {
+                mPinHash = hashed;
+                persistNow();
+            }
         }
     }
 
@@ -208,8 +269,17 @@ public class MasterPasswordData {
             return;
         }
 
-        // Legacy passwords were stored plaintext. Hash before storing.
-        mPinHash = Utils.hashPin(password);
+        if (Utils.isHashedPin(password)) {
+            // Already a hash (e.g. SHA-256 from GeneralData): adopt it, don't hash the hash.
+            mPinHash = password;
+        } else {
+            // Legacy passwords were stored plaintext. Hash before storing.
+            mPinHash = Utils.hashPin(password);
+        }
+
+        if (mPinHash == null) {
+            return;
+        }
 
         if (masterPassword != null) {
             // Legacy behavior: a master password locked the app at every startup.
@@ -222,8 +292,12 @@ public class MasterPasswordData {
         persistNow();
     }
 
+    /**
+     * Immediate, synchronous write. Used for security state (PIN, lockout counter) so a
+     * force-kill can't roll it back.
+     */
     public void persistNow() {
-        Utils.post(mPersistStateInt);
+        persistStateInt();
     }
 
     private void persistState() {

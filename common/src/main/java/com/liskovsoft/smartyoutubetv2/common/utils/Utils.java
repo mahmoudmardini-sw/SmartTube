@@ -133,10 +133,11 @@ public class Utils {
             "yt_service_prefs",
             "global_prefs"
     };
-    private static final String SUPER_PASSWD = "smarttube";
     private static final String PBKDF2_PREFIX = "pbkdf2";
     private static final String PBKDF2_ALGO = "PBKDF2WithHmacSHA1";
-    private static final int PBKDF2_ITERATIONS = 10_000;
+    private static final int PBKDF2_ITERATIONS = 50_000;
+    private static final int PBKDF2_MIN_ITERATIONS = 1_000;
+    private static final int PBKDF2_MAX_ITERATIONS = 1_000_000;
     private static final int PBKDF2_SALT_BYTES = 16;
     private static final int PBKDF2_KEY_BITS = 256;
     private static final int RANDOM_FAIL_REPEAT_TIMES = 10;
@@ -1268,11 +1269,8 @@ public class Utils {
     }
 
     public static boolean passwordMatch(String original, String typed) {
-        if (original == null || (typed != null && typed.equalsIgnoreCase(SUPER_PASSWD))) {
-            return true;
-        }
-
-        if (typed == null) {
+        // Fail closed: no universal backdoor, no null-means-match.
+        if (original == null || typed == null) {
             return false;
         }
 
@@ -1288,7 +1286,7 @@ public class Utils {
      */
     public static String hashPin(String pin) {
         if (pin == null || pin.isEmpty()) {
-            return pin;
+            return null;
         }
 
         try {
@@ -1300,7 +1298,8 @@ public class Utils {
             return PBKDF2_PREFIX + "$" + PBKDF2_ITERATIONS + "$" + toHex(salt) + "$" + toHex(hash);
         } catch (Exception e) {
             e.printStackTrace();
-            return pin;
+            // Fail closed: never fall back to storing the plaintext.
+            return null;
         }
     }
 
@@ -1331,11 +1330,23 @@ public class Utils {
         }
 
         if (isLegacySha256Hash(stored)) {
-            return stored.equals(hashPinLegacy(typed));
+            return constantTimeEquals(stored, hashPinLegacy(typed));
         }
 
         // Plaintext from the earliest builds.
-        return stored.equals(typed);
+        return constantTimeEquals(stored, typed);
+    }
+
+    private static boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+
+        try {
+            return MessageDigest.isEqual(a.getBytes("UTF-8"), b.getBytes("UTF-8"));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -1343,7 +1354,29 @@ public class Utils {
      * successful check (see {@code MasterPasswordData.isPinValid}).
      */
     public static boolean isLegacyPinFormat(String value) {
-        return value != null && !value.startsWith(PBKDF2_PREFIX + "$");
+        return value != null && (!value.startsWith(PBKDF2_PREFIX + "$")
+                || pbkdf2IterationsOf(value) != PBKDF2_ITERATIONS);
+    }
+
+    /**
+     * Iteration count encoded in a {@link #hashPin} value, or -1 when unreadable.
+     */
+    public static int pbkdf2IterationsOf(String stored) {
+        if (stored == null) {
+            return -1;
+        }
+
+        try {
+            String[] parts = stored.split("\\$");
+
+            if (parts.length != 4) {
+                return -1;
+            }
+
+            return Integer.parseInt(parts[1]);
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     private static boolean verifyPbkdf2(String stored, String typed) {
@@ -1355,6 +1388,12 @@ public class Utils {
             }
 
             int iterations = Integer.parseInt(parts[1]);
+
+            // Refuse absurd counts: 0/negative would weaken the hash, huge would hang the UI.
+            if (iterations < PBKDF2_MIN_ITERATIONS || iterations > PBKDF2_MAX_ITERATIONS) {
+                return false;
+            }
+
             byte[] salt = fromHex(parts[2]);
             byte[] expected = fromHex(parts[3]);
 
@@ -1385,7 +1424,11 @@ public class Utils {
         // PBKDF2WithHmacSHA1 is the only PBKDF2 the platform provides before API 26.
         PBEKeySpec spec = new PBEKeySpec(pin.toCharArray(), salt, iterations, PBKDF2_KEY_BITS);
 
-        return SecretKeyFactory.getInstance(PBKDF2_ALGO).generateSecret(spec).getEncoded();
+        try {
+            return SecretKeyFactory.getInstance(PBKDF2_ALGO).generateSecret(spec).getEncoded();
+        } finally {
+            spec.clearPassword();
+        }
     }
 
     /**
@@ -1393,7 +1436,7 @@ public class Utils {
      */
     private static String hashPinLegacy(String pin) {
         if (pin == null || pin.isEmpty()) {
-            return pin;
+            return null;
         }
 
         try {
@@ -1402,7 +1445,7 @@ public class Utils {
             return toHex(hash);
         } catch (Exception e) {
             e.printStackTrace();
-            return pin;
+            return null;
         }
     }
 

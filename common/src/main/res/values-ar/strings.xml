@@ -505,6 +505,10 @@
   <string name="set_pin">تعيين الرمز</string>
   <string name="pin_remote_hint">استخدم أزرار الأرقام في الريموت لإدخال الرمز</string>
   <string name="wrong_pin">رمز خاطئ</string>
+  <string name="pin_locked_try_later">محاولات خاطئة كثيرة — حاول مجدداً بعد %d ثانية</string>
+  <string name="confirm_pin">تأكيد الرمز</string>
+  <string name="pin_too_weak">يجب أن يكون الرمز 4 أرقام على الأقل وغير بديهي (مثل 0000، 1234)</string>
+  <string name="pin_mismatch">الرمزان غير متطابقين، حاول مجدداً</string>
   <string name="schedule_start_time">وقت البدء</string>
   <string name="schedule_end_time">وقت الانتهاء</string>
   <string name="app_access_lock">قفل الدخول للتطبيق</string>

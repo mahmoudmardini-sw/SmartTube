@@ -35,6 +35,8 @@ public class TimeLimitController extends BasePlayerController {
 
     @Override
     public void onPlay() {
+        FamilyControlData.instance(getContext()).checkPauseExpiry();
+
         if (!isActive() || getPlayer() == null) {
             return;
         }
@@ -71,6 +73,7 @@ public class TimeLimitController extends BasePlayerController {
 
     @Override
     public void onVideoLoaded(Video item) {
+        FamilyControlData.instance(getContext()).checkPauseExpiry();
         stopTracking();
 
         if (isActive() && isLimitReached()) {
@@ -85,6 +88,13 @@ public class TimeLimitController extends BasePlayerController {
 
         if (!isActive() || getPlayer() == null) {
             return;
+        }
+
+        // Autoplay can reach a playable state without a fresh onPlay edge: start an
+        // interval so the viewing doesn't go untracked.
+        if (mPlayStartMs <= 0 && getPlayer().isPlaying()) {
+            mPlayStartMs = System.currentTimeMillis();
+            mTrackingChannelId = getChannelId();
         }
 
         flushUsage();
@@ -173,7 +183,16 @@ public class TimeLimitController extends BasePlayerController {
                 getContext().getString(R.string.enter_pin),
                 null,
                 pin -> {
-                    if (!MasterPasswordData.instance(getContext()).isPinValid(pin)) {
+                    MasterPasswordData data = MasterPasswordData.instance(getContext());
+                    long lockoutSec = data.getPinLockoutRemainingMs() / 1000;
+
+                    if (lockoutSec > 0) {
+                        MessageHelpers.showMessage(getContext(), getContext().getString(
+                                R.string.pin_locked_try_later, lockoutSec));
+                        return false;
+                    }
+
+                    if (!data.isPinValid(pin)) {
                         return false; // the dialog shows "wrong PIN" and allows a retry
                     }
 

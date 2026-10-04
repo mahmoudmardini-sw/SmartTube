@@ -2,6 +2,7 @@ package com.liskovsoft.smartyoutubetv2.common.prefs;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.SystemClock;
 
 import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
 import com.liskovsoft.sharedutils.helpers.Helpers;
@@ -53,17 +54,24 @@ public class FamilyControlData implements ProfileChangeListener {
     private static final int ALL_SECTIONS_MASK = (1 << RESTRICTED_SECTIONS.length) - 1;
 
     @SuppressLint("StaticFieldLeak")
-    private static FamilyControlData sInstance;
+    private static volatile FamilyControlData sInstance;
 
     private final Context mContext;
     private final AppPrefs mPrefs;
-    private final Runnable mPersistStateInt = this::persistStateInt;
+    private final Runnable mPersistPendingInt = this::persistPendingInt;
+    // Debounced write captured at mutation time: the profile key and the payload are frozen
+    // synchronously so an account switch before the delay can't drop the write or aim it at
+    // the wrong profile's file.
+    private String mPendingKey;
+    private String mPendingPayload;
 
     // Family control state (per account)
     private boolean mIsFamilyControlEnabled;
 
     // Temporary pause (parent-granted via PIN): restrictions are lifted until this timestamp
     private long mPausedUntilMs;
+    // Last wall-clock seen: turning the clock back can't extend a pause (fail closed).
+    private long mLastWallMs;
 
     // Snapshot of the normal (non-restricted) UI state, captured before enabling
     private int mSnapshotTopButtons;
@@ -82,9 +90,16 @@ public class FamilyControlData implements ProfileChangeListener {
         restoreState();
     }
 
+    /** Longest pause the UI offers: clamps corrupt clock values on restore. */
+    private static final long MAX_PAUSE_MS = 24 * 3_600_000L;
+
     public static FamilyControlData instance(Context context) {
         if (sInstance == null) {
-            sInstance = new FamilyControlData(context.getApplicationContext());
+            synchronized (FamilyControlData.class) {
+                if (sInstance == null) {
+                    sInstance = new FamilyControlData(context.getApplicationContext());
+                }
+            }
         }
 
         return sInstance;
@@ -108,7 +123,24 @@ public class FamilyControlData implements ProfileChangeListener {
     }
 
     public boolean isPauseActive() {
-        return mPausedUntilMs > 0 && System.currentTimeMillis() < mPausedUntilMs;
+        if (mPausedUntilMs <= 0) {
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+
+        if (now >= mPausedUntilMs) {
+            return false;
+        }
+
+        // Backward clock jump: don't extend the pause, gates close immediately.
+        // The UI state is re-applied by the next checkPauseExpiry().
+        if (mLastWallMs > 0 && now < mLastWallMs - 60_000) {
+            return false;
+        }
+
+        mLastWallMs = now;
+        return true;
     }
 
     public long getPausedUntilMs() {
@@ -121,12 +153,20 @@ public class FamilyControlData implements ProfileChangeListener {
      * the pause expires (see {@link #checkPauseExpiry}).
      */
     public void pauseFamilyControl(long untilMs) {
-        if (!mIsFamilyControlEnabled || untilMs <= System.currentTimeMillis()) {
+        long now = System.currentTimeMillis();
+
+        if (!mIsFamilyControlEnabled || untilMs <= now) {
             return;
+        }
+
+        // Never trust a far-future deadline (corrupt data or clock games): cap it.
+        if (untilMs - now > MAX_PAUSE_MS) {
+            untilMs = now + MAX_PAUSE_MS;
         }
 
         restoreRestrictions();
         mPausedUntilMs = untilMs;
+        mLastWallMs = now;
         persistNow();
     }
 
@@ -139,6 +179,7 @@ public class FamilyControlData implements ProfileChangeListener {
         }
 
         mPausedUntilMs = 0;
+        mLastWallMs = System.currentTimeMillis();
         persistNow();
         applyRestrictions();
     }
@@ -150,7 +191,19 @@ public class FamilyControlData implements ProfileChangeListener {
      * @return true if the pause just expired and restrictions were re-applied
      */
     public boolean checkPauseExpiry() {
-        if (mIsFamilyControlEnabled && mPausedUntilMs > 0 && System.currentTimeMillis() >= mPausedUntilMs) {
+        long now = System.currentTimeMillis();
+
+        if (!mIsFamilyControlEnabled || mPausedUntilMs <= 0) {
+            mLastWallMs = now;
+            return false;
+        }
+
+        boolean expired = now >= mPausedUntilMs
+                || (mLastWallMs > 0 && now < mLastWallMs - 60_000);
+
+        mLastWallMs = now;
+
+        if (expired) {
             mPausedUntilMs = 0;
             persistNow();
             applyRestrictions();
@@ -169,7 +222,8 @@ public class FamilyControlData implements ProfileChangeListener {
 
         mIsFamilyControlEnabled = true;
         mPausedUntilMs = 0;
-        persistState();
+        mLastWallMs = System.currentTimeMillis();
+        persistNow();
 
         applyRestrictions();
     }
@@ -181,12 +235,13 @@ public class FamilyControlData implements ProfileChangeListener {
     public void disableFamilyControl() {
         mIsFamilyControlEnabled = false;
         mPausedUntilMs = 0;
-        persistState();
+        mLastWallMs = System.currentTimeMillis();
+        mHasSnapshot = false;
 
         restoreRestrictions();
 
-        mHasSnapshot = false;
-        persistState();
+        // Single write with the final state (not one per mutation).
+        persistNow();
     }
 
     /**
@@ -322,9 +377,18 @@ public class FamilyControlData implements ProfileChangeListener {
         // Missing in older data: default to "no pause".
         mPausedUntilMs = Helpers.parseLong(split, o + FIELD_PAUSED_UNTIL_MS, 0);
 
-        if (data == null) {
+        if (data == null || data.isEmpty()) {
             migrateLegacyData();
         }
+
+        // A deadline further out than any pause the UI can create is corrupt
+        // (or the clock was moved forward and back): fail closed.
+        if (mPausedUntilMs > 0 && mPausedUntilMs - System.currentTimeMillis() > MAX_PAUSE_MS) {
+            mPausedUntilMs = 0;
+            persistNow();
+        }
+
+        mLastWallMs = System.currentTimeMillis();
     }
 
     /**
@@ -361,24 +425,42 @@ public class FamilyControlData implements ProfileChangeListener {
         persistNow();
     }
 
+    /**
+     * Immediate, synchronous write. Security state (enable/disable/pause) must not be
+     * rollbackable by a force-kill.
+     */
     public void persistNow() {
-        Utils.post(mPersistStateInt);
+        mPrefs.setData(mPrefs.getFamilyControlDataKey(), buildPayload());
     }
 
     private void persistState() {
-        Utils.postDelayed(mPersistStateInt, 10_000);
+        // Freeze the key and the payload now: an account switch before the delay fires
+        // must neither drop this write nor retarget it at the new profile.
+        mPendingKey = mPrefs.getFamilyControlDataKey();
+        mPendingPayload = buildPayload();
+        Utils.postDelayed(mPersistPendingInt, 10_000);
     }
 
-    private void persistStateInt() {
-        mPrefs.setFamilyControlData(Helpers.mergeData(
+    private void persistPendingInt() {
+        if (mPendingKey != null && mPendingPayload != null) {
+            mPrefs.setData(mPendingKey, mPendingPayload);
+        }
+        mPendingKey = null;
+        mPendingPayload = null;
+    }
+
+    private String buildPayload() {
+        return Helpers.mergeData(
                 FORMAT_VERSION, mIsFamilyControlEnabled, mSnapshotTopButtons, mSnapshotMenuItems, mSnapshotPlayerButtons,
                 mSnapshotSuggestionsDisabled, mSnapshotPopularSearchesDisabled, mSnapshotPlaybackMode, mHasSnapshot,
-                mSnapshotEnabledSections, mPausedUntilMs));
+                mSnapshotEnabledSections, mPausedUntilMs);
     }
 
     @Override
     public void onProfileChanged() {
-        Utils.removeCallbacks(mPersistStateInt);
+        // Flush the old profile's pending write first instead of dropping it.
+        persistPendingInt();
+        Utils.removeCallbacks(mPersistPendingInt);
         restoreState();
     }
 }
