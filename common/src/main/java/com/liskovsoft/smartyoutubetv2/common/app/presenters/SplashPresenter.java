@@ -355,10 +355,9 @@ public class SplashPresenter extends BasePresenter<SplashView> {
             onSuccess.run();
             getView().finishView(); // critical part, fix black screen on app exit
         } else {
-            SimpleEditDialog.showPassword(
+            SimpleEditDialog.showPin(
                     getContext(),
                     getContext().getString(R.string.enter_master_password),
-                    null,
                     newValue -> {
                         if (masterPasswordData.isPinValid(newValue)) {
                             onSuccess.run();

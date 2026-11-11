@@ -1,5 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers;
 
+import android.os.SystemClock;
+
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
@@ -38,6 +40,9 @@ public class TimeLimitController extends BasePlayerController {
         FamilyControlData.instance(getContext()).checkPauseExpiry();
 
         if (!isActive() || getPlayer() == null) {
+            // Restrictions were lifted while tracking: flush the active interval and stop,
+            // so the unrestricted time is not charged to the daily limit later.
+            stopTracking();
             return;
         }
 
@@ -47,7 +52,7 @@ public class TimeLimitController extends BasePlayerController {
         }
 
         if (mPlayStartMs <= 0) {
-            mPlayStartMs = System.currentTimeMillis();
+            mPlayStartMs = SystemClock.elapsedRealtime();
             mTrackingChannelId = getChannelId();
         }
     }
@@ -87,13 +92,15 @@ public class TimeLimitController extends BasePlayerController {
         FamilyControlData.instance(getContext()).checkPauseExpiry();
 
         if (!isActive() || getPlayer() == null) {
+            // A pause was granted (or family control disabled): stop charging watch time.
+            stopTracking();
             return;
         }
 
         // Autoplay can reach a playable state without a fresh onPlay edge: start an
         // interval so the viewing doesn't go untracked.
         if (mPlayStartMs <= 0 && getPlayer().isPlaying()) {
-            mPlayStartMs = System.currentTimeMillis();
+            mPlayStartMs = SystemClock.elapsedRealtime();
             mTrackingChannelId = getChannelId();
         }
 
@@ -178,10 +185,9 @@ public class TimeLimitController extends BasePlayerController {
     }
 
     private void askPinAndShowOptions() {
-        SimpleEditDialog.showPassword(
+        SimpleEditDialog.showPin(
                 getContext(),
                 getContext().getString(R.string.enter_pin),
-                null,
                 pin -> {
                     MasterPasswordData data = MasterPasswordData.instance(getContext());
                     long lockoutSec = data.getPinLockoutRemainingMs() / 1000;
@@ -262,7 +268,8 @@ public class TimeLimitController extends BasePlayerController {
             return;
         }
 
-        long now = System.currentTimeMillis();
+        // Monotonic clock: changing the system time must not inflate or erase watch time.
+        long now = SystemClock.elapsedRealtime();
         long deltaMs = now - mPlayStartMs;
         mPlayStartMs = now;
 

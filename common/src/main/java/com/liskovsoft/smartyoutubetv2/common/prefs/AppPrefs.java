@@ -79,9 +79,10 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
             "main_ui_data2",
             "video_player_data",
             "video_player_tweaks_data",
-            "blocked_channel_data",
-            "family_control_data",
-            "time_limit_data"
+            "blocked_channel_data"
+            // NOTE: family_control_data / time_limit_data are intentionally absent. They are
+            // always stored per profile (see getFamilyControlDataKey), so moving them to the
+            // bare keys when multi-profiles is disabled made family control silently vanish.
     };
 
     private void migrateProfileData(boolean toMultiProfiles) {
@@ -151,7 +152,20 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
 
     public String getFamilyControlData() {
         // Always use multiple profiles
-        return getData(getFamilyControlDataKey());
+        String key = getFamilyControlDataKey();
+        String data = getData(key);
+
+        if (data == null) {
+            // Recovery: the old multi-profile migration moved this to the bare key, where the
+            // always-per-profile getter could no longer see it (family control silently off).
+            data = getData(FAMILY_CONTROL_DATA);
+            if (data != null) {
+                setData(key, data);
+                deleteData(FAMILY_CONTROL_DATA);
+            }
+        }
+
+        return data;
     }
 
     public void setFamilyControlData(String data) {
@@ -169,7 +183,19 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
 
     public String getTimeLimitData() {
         // Always use multiple profiles
-        return getData(getTimeLimitDataKey());
+        String key = getTimeLimitDataKey();
+        String data = getData(key);
+
+        if (data == null) {
+            // Recovery: see getFamilyControlData.
+            data = getData(TIME_LIMIT_DATA);
+            if (data != null) {
+                setData(key, data);
+                deleteData(TIME_LIMIT_DATA);
+            }
+        }
+
+        return data;
     }
 
     public void setTimeLimitData(String data) {

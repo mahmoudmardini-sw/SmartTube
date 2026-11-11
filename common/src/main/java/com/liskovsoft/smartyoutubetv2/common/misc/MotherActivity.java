@@ -22,11 +22,14 @@ import com.liskovsoft.sharedutils.locale.LocaleUpdater;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.views.SplashView;
 import com.liskovsoft.smartyoutubetv2.common.app.views.ViewManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.MasterPasswordData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
+import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
 import com.r0adkll.slidr.Slidr;
@@ -41,12 +44,20 @@ public class MotherActivity extends FragmentActivity {
     private static final String TAG = MotherActivity.class.getSimpleName();
     private static final float DEFAULT_DENSITY = 2.0f; // xhdpi
     private static final float DEFAULT_WIDTH = 1920f; // xhdpi
+    private static final long APP_LOCK_CHECK_DELAY_MS = 500;
     private static DisplayMetrics sCachedDisplayMetrics;
     protected static boolean sIsInPipMode;
+    // Process-wide foreground tracking (activities from different screens overlap during
+    // transitions, so onStart/onStop counting is more reliable than a single resumed flag).
+    private static int sStartedActivities;
+    private static boolean sFirstLaunchDone;
+    private static boolean sAppLockChecked;
     private ScreensaverManager mScreensaverManager;
     // Make static in case Don't keep activities enabled in Developer settings
     private static List<OnPermissions> mOnPermissions;
     private static List<OnResult> mOnResults;
+    private final Runnable mCheckAppLock = this::checkAppLock;
+    private boolean mAppLockDialogShown;
     private long mLastKeyDownTime;
     private boolean mEnableThrottleKeyDown;
     private boolean mIsOculusQuestFixEnabled;
@@ -205,6 +216,73 @@ public class MotherActivity extends FragmentActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+
+        sStartedActivities++;
+
+        if (sStartedActivities == 1) {
+            if (!sFirstLaunchDone) {
+                sFirstLaunchDone = true;
+                // SplashPresenter checks the lock on a cold start. Any other first activity
+                // (e.g. a TV launcher shortcut) must run the check itself.
+                sAppLockChecked = this instanceof SplashView;
+            } else {
+                // Back from the background: the access window may have changed.
+                sAppLockChecked = false;
+            }
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        sStartedActivities = Math.max(0, sStartedActivities - 1);
+        Utils.removeCallbacks(mCheckAppLock);
+
+        super.onStop();
+    }
+
+    /**
+     * Re-locks a running app when the PIN-protected access window is left and the app
+     * comes back to the foreground (cold starts are handled by SplashPresenter).
+     */
+    private void checkAppLock() {
+        if (sAppLockChecked || isFinishing() || mAppLockDialogShown || sStartedActivities <= 0) {
+            return;
+        }
+
+        sAppLockChecked = true;
+
+        MasterPasswordData data = MasterPasswordData.instance(this);
+
+        if (!data.isLockedNow()) {
+            return;
+        }
+
+        mAppLockDialogShown = true;
+        final boolean[] unlocked = {false};
+
+        SimpleEditDialog.showPin(
+                this,
+                getString(R.string.enter_master_password),
+                pin -> {
+                    if (data.isPinValid(pin)) {
+                        unlocked[0] = true;
+                        return true;
+                    }
+                    return false;
+                },
+                () -> {
+                    mAppLockDialogShown = false;
+
+                    if (!unlocked[0] && !isFinishing()) {
+                        // Dismissed without the PIN: don't leave the app open.
+                        Utils.properlyFinishTheApp(this);
+                    }
+                });
+    }
+
+    @Override
     protected void onResume() {
         mIsBackPressed = false;
         try {
@@ -220,6 +298,10 @@ public class MotherActivity extends FragmentActivity {
 
         // Restore this activity's screensaver policy after returning to the foreground.
         mScreensaverManager.resume();
+
+        if (!sAppLockChecked) {
+            Utils.postDelayed(mCheckAppLock, APP_LOCK_CHECK_DELAY_MS);
+        }
     }
 
     @Override

@@ -516,13 +516,14 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
                 UiOptionItem.from(getContext().getString(R.string.set_channel_time_limit), optionItem -> {
                     mDialogPresenter.closeDialog();
 
-                    // Protect the limits from the restricted (child) account.
-                    if (FamilyControlData.instance(getContext()).isFamilyControlEnabled()
+                    // Protect the limits from the restricted (child) account. Use the configured
+                    // flag, not isFamilyControlEnabled(): a parent-granted pause lifts playback
+                    // restrictions but must not let the child edit the limits.
+                    if (FamilyControlData.instance(getContext()).isFamilyControlConfigured()
                             && MasterPasswordData.instance(getContext()).hasPin()) {
-                        SimpleEditDialog.showPassword(
+                        SimpleEditDialog.showPin(
                                 getContext(),
                                 getContext().getString(R.string.enter_settings_password),
-                                null,
                                 newValue -> {
                                     if (MasterPasswordData.instance(getContext()).isPinValid(newValue)) {
                                         showChannelTimeLimitOptions(channelId, channelName);

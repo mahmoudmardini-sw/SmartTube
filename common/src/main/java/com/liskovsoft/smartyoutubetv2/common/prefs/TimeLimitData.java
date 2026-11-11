@@ -2,6 +2,7 @@ package com.liskovsoft.smartyoutubetv2.common.prefs;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.SystemClock;
 import android.util.Pair;
 
 import androidx.annotation.Nullable;
@@ -33,6 +34,13 @@ public class TimeLimitData implements ProfileChangeListener {
     private static final int FIELD_USAGE_DATE = 2;
     private static final int FIELD_TOTAL_USAGE = 3;
     private static final int FIELD_CHANNEL_USAGE = 4;
+    private static final int FIELD_TRUSTED_WALL_MS = 5;
+    private static final int FIELD_LAST_ELAPSED_MS = 6;
+    /**
+     * Wall-clock drift tolerated before a jump is treated as tampering (NTP corrections,
+     * DST, the user fixing the clock by a few minutes).
+     */
+    private static final long MAX_CLOCK_DRIFT_MS = 5 * 60 * 1000L;
     @SuppressLint("StaticFieldLeak")
     private static volatile TimeLimitData sInstance;
     private final AppPrefs mPrefs;
@@ -44,6 +52,9 @@ public class TimeLimitData implements ProfileChangeListener {
     private String mUsageDate;
     private long mTotalUsageSec;
     private Map<String, Long> mChannelUsageSec;
+    /** Last trusted wall-clock time (epoch ms) and the elapsedRealtime anchor it was taken at. */
+    private long mTrustedWallMs;
+    private long mLastElapsedMs;
 
     public static class ChannelLimit {
         public String channelId;
@@ -250,7 +261,7 @@ public class TimeLimitData implements ProfileChangeListener {
     }
 
     private void resetIfNeeded() {
-        String today = new SimpleDateFormat("yyyyMMdd", Locale.US).format(new Date());
+        String today = new SimpleDateFormat("yyyyMMdd", Locale.US).format(new Date(updateTrustedClock()));
 
         if (!today.equals(mUsageDate)) {
             synchronized (this) {
@@ -265,6 +276,43 @@ public class TimeLimitData implements ProfileChangeListener {
     }
 
     /**
+     * Wall-clock time the daily reset may trust.
+     * <p>
+     * The system clock is user-writable: moving it to tomorrow would otherwise reset the
+     * daily limit (and moving it back would reset it again). Once anchored, time is
+     * projected with {@link SystemClock#elapsedRealtime()} (which keeps counting during
+     * sleep) and wall-clock jumps beyond {@link #MAX_CLOCK_DRIFT_MS} are ignored.
+     * <p>
+     * A reboot resets {@code elapsedRealtime}, so the first call after it re-anchors to the
+     * wall clock. That still catches the common in-session tampering; a clock change made
+     * while the device was off cannot be told apart from the device being off for that long.
+     */
+    private synchronized long updateTrustedClock() {
+        long nowWallMs = System.currentTimeMillis();
+        long nowElapsedMs = SystemClock.elapsedRealtime();
+
+        if (mTrustedWallMs <= 0 || nowElapsedMs < mLastElapsedMs) {
+            // First run or reboot: there is no monotonic reference to compare against.
+            mTrustedWallMs = nowWallMs;
+            mLastElapsedMs = nowElapsedMs;
+            return mTrustedWallMs;
+        }
+
+        long projectedWallMs = mTrustedWallMs + (nowElapsedMs - mLastElapsedMs);
+
+        if (Math.abs(nowWallMs - projectedWallMs) > MAX_CLOCK_DRIFT_MS) {
+            // Wall clock was moved: keep the monotonic projection as the trusted time.
+            mTrustedWallMs = projectedWallMs;
+        } else {
+            // Normal drift: re-anchor to the wall clock.
+            mTrustedWallMs = nowWallMs;
+        }
+
+        mLastElapsedMs = nowElapsedMs;
+        return mTrustedWallMs;
+    }
+
+    /**
      * Storage delimiters must not appear inside channel fields: they'd split the record
      * and shift the usage columns on the next load.
      */
@@ -274,6 +322,11 @@ public class TimeLimitData implements ProfileChangeListener {
     }
 
     public void persistNow() {
+        // Cancel a pending debounced write: it was captured with an older state and would
+        // silently overwrite this one seconds later.
+        Utils.removeCallbacks(mPersistPendingInt);
+        mPendingKey = null;
+        mPendingPayload = null;
         mPrefs.setData(mPrefs.getTimeLimitDataKey(), buildPayload());
     }
 
@@ -294,7 +347,8 @@ public class TimeLimitData implements ProfileChangeListener {
 
     private String buildPayload() {
         return Helpers.mergeData(
-                FORMAT_VERSION, mDailyLimitMinutes, mChannelLimits, mUsageDate, mTotalUsageSec, mChannelUsageSec);
+                FORMAT_VERSION, mDailyLimitMinutes, mChannelLimits, mUsageDate, mTotalUsageSec, mChannelUsageSec,
+                mTrustedWallMs, mLastElapsedMs);
     }
 
     private synchronized void restoreState() {
@@ -309,6 +363,8 @@ public class TimeLimitData implements ProfileChangeListener {
         mUsageDate = Helpers.parseStr(split, o + FIELD_USAGE_DATE);
         mTotalUsageSec = Helpers.parseLong(split, o + FIELD_TOTAL_USAGE, 0);
         mChannelUsageSec = Helpers.parseMap(split, o + FIELD_CHANNEL_USAGE, Helpers::parseStr, Helpers::parseLong);
+        mTrustedWallMs = Helpers.parseLong(split, o + FIELD_TRUSTED_WALL_MS, 0);
+        mLastElapsedMs = Helpers.parseLong(split, o + FIELD_LAST_ELAPSED_MS, 0);
 
         if (mChannelLimits == null) {
             mChannelLimits = new ArrayList<>();

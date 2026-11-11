@@ -159,11 +159,36 @@ profile-key snapshotting; `YouTubeAccount` email equality scoped to page/channel
 SABR fallback budget resets per video with client rotation and a terminal no-retry state;
 family-control Next goes through the `onNextClicked` chain (incl. remote control).
 
+## Security hardening (2026-11)
+
+Branch `fix/security-hardening` (on top of `merge/32.72`):
+
+- **Trusted clock** — `MasterPasswordData` (access window) and `TimeLimitData` (daily reset)
+  persist a wall-clock anchor plus an `elapsedRealtime` projection. Wall-clock jumps beyond the
+  tolerance (60 s / 5 min) are ignored; a reboot re-anchors (a forward jump across a reboot is
+  indistinguishable from the device being off). The PIN lockout and watch-time accounting use
+  `elapsedRealtime` only.
+- **App lock on return** — `MotherActivity` re-checks the access window when the app returns to
+  the foreground; dismissing the PIN dialog exits the app. Cold starts stay in `SplashPresenter`.
+- **PIN entry on any remote** — `SimpleEditDialog.showPin` shows an on-screen 3×4 keypad
+  (remote number keys still work); `showPassword` is text-only and used for account passwords.
+- **Settings gate** — every settings item asks for the PIN whenever one exists, not only while
+  family control is active. Hidden sections and channel time limits stay protected during a
+  pause (`isFamilyControlConfigured`).
+- **Write ordering** — `persistNow()` cancels the pending debounced write (a stale payload could
+  otherwise overwrite a security change); lock-window toggles persist immediately;
+  `disableFamilyControl()` restores the UI before clearing its snapshot.
+- **Profile storage** — family control and time-limit data are always per-profile; the old
+  multi-profile migration moved them to bare keys, so the getters recover and re-key that data.
+- **Watch-time accounting** — `TimeLimitController` uses the monotonic clock, stops tracking
+  when family control is inactive/paused, and flushes the active interval before pausing.
+
 ## Merge history
 
 | Branch | Upstream base | Notes |
 | ------ | ------------- | ----- |
 | `merge/32.47s` | `32.47s` | first fork merge |
 | `merge/32.56s` | `32.56s` | self-update disabled |
-| `merge/32.72` | `yuliskov/master` @ `32.72` (versionCode 2462) | SABR live support, DIAL casting, add-to-queue intent, settings reorg; submodules re-pinned to `MediaServiceCore 4be5193d` / `SharedModules 5b6b5d1d` |
+| `merge/32.72` | `yuliskov/master` @ `32.72` (versionCode 2462) | SABR live support, DIAL casting, add-to-queue intent, settings reorg; submodules rebased from `MediaServiceCore 4be5193d` / `SharedModules 5b6b5d1d` to fork commits `59d0c22b` / `a685da5` |
+| `fix/security-hardening` | `merge/32.72` | trusted clocks, foreground app lock, on-screen PIN keypad, settings/section gates, persist ordering, per-profile family data |
 

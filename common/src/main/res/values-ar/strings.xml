@@ -791,7 +791,7 @@
     <string name="pause_family_control_until_midnight">إيقاف التحكم العائلي مؤقتاً — حتى منتصف الليل</string>
     <string name="pin_locked_try_later">محاولات خاطئة كثيرة — حاول مجدداً بعد %d ثانية</string>
     <string name="pin_mismatch">الرمزان غير متطابقين، حاول مجدداً</string>
-    <string name="pin_remote_hint">استخدم أزرار الأرقام في الريموت لإدخال الرمز</string>
+    <string name="pin_remote_hint">استخدم أزرار الأرقام في الريموت أو لوحة الأرقام على الشاشة</string>
     <string name="pin_too_weak">يجب أن يكون الرمز 4 أرقام على الأقل وغير بديهي (مثل 0000، 1234)</string>
     <string name="schedule_end_time">وقت الانتهاء</string>
     <string name="schedule_start_time">وقت البدء</string>

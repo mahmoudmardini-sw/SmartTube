@@ -236,9 +236,10 @@ public class FamilyControlData implements ProfileChangeListener {
         mIsFamilyControlEnabled = false;
         mPausedUntilMs = 0;
         mLastWallMs = System.currentTimeMillis();
-        mHasSnapshot = false;
 
+        // Restore before clearing the snapshot: restoreRestrictions() reads mHasSnapshot.
         restoreRestrictions();
+        mHasSnapshot = false;
 
         // Single write with the final state (not one per mutation).
         persistNow();
@@ -430,6 +431,11 @@ public class FamilyControlData implements ProfileChangeListener {
      * rollbackable by a force-kill.
      */
     public void persistNow() {
+        // Cancel a pending debounced write: it was captured with an older state and would
+        // silently overwrite this one seconds later (e.g. captureSnapshot() -> enable).
+        Utils.removeCallbacks(mPersistPendingInt);
+        mPendingKey = null;
+        mPendingPayload = null;
         mPrefs.setData(mPrefs.getFamilyControlDataKey(), buildPayload());
     }
 

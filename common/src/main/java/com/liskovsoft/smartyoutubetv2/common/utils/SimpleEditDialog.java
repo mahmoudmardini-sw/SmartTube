@@ -35,7 +35,22 @@ public class SimpleEditDialog {
         showPassword(context, dialogTitle, defaultValue, onChange, null);
     }
 
+    /**
+     * Alphanumeric password entry (account passwords). Uses the soft keyboard / remote text
+     * entry; numeric PINs go through {@link #showPin}.
+     */
     public static void showPassword(Context context, String dialogTitle, String defaultValue, OnChange onChange, Runnable onDismiss) {
+        show(context, dialogTitle, dialogTitle, defaultValue, onChange, onDismiss, true);
+    }
+
+    /**
+     * Numeric PIN entry with an on-screen keypad (works on remotes without number keys).
+     */
+    public static void showPin(Context context, String dialogTitle, OnChange onChange) {
+        showPin(context, dialogTitle, onChange, null);
+    }
+
+    public static void showPin(Context context, String dialogTitle, OnChange onChange, Runnable onDismiss) {
         showPinEntry(context, dialogTitle, onChange, onDismiss);
     }
 
@@ -149,73 +164,55 @@ public class SimpleEditDialog {
             }
         };
 
+        // On-screen keypad: remotes without number keys can still enter the PIN.
+        int[] digitIds = {
+                R.id.pin_key_0, R.id.pin_key_1, R.id.pin_key_2, R.id.pin_key_3, R.id.pin_key_4,
+                R.id.pin_key_5, R.id.pin_key_6, R.id.pin_key_7, R.id.pin_key_8, R.id.pin_key_9};
+        for (int i = 0; i < digitIds.length; i++) {
+            final char digit = (char) ('0' + i);
+            contentView.findViewById(digitIds[i]).setOnClickListener(view -> {
+                pinBuilder.append(digit);
+                updateDots(dotsDisplay, pinBuilder.length());
+            });
+        }
+        contentView.findViewById(R.id.pin_key_delete).setOnClickListener(view -> {
+            if (pinBuilder.length() > 0) {
+                pinBuilder.deleteCharAt(pinBuilder.length() - 1);
+            }
+            updateDots(dotsDisplay, pinBuilder.length());
+        });
+
         contentView.setFocusable(true);
         contentView.setFocusableInTouchMode(true);
-        contentView.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                switch (keyCode) {
-                    case KeyEvent.KEYCODE_0:
-                    case KeyEvent.KEYCODE_NUMPAD_0:
-                        pinBuilder.append('0');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_1:
-                    case KeyEvent.KEYCODE_NUMPAD_1:
-                        pinBuilder.append('1');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_2:
-                    case KeyEvent.KEYCODE_NUMPAD_2:
-                        pinBuilder.append('2');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_3:
-                    case KeyEvent.KEYCODE_NUMPAD_3:
-                        pinBuilder.append('3');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_4:
-                    case KeyEvent.KEYCODE_NUMPAD_4:
-                        pinBuilder.append('4');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_5:
-                    case KeyEvent.KEYCODE_NUMPAD_5:
-                        pinBuilder.append('5');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_6:
-                    case KeyEvent.KEYCODE_NUMPAD_6:
-                        pinBuilder.append('6');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_7:
-                    case KeyEvent.KEYCODE_NUMPAD_7:
-                        pinBuilder.append('7');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_8:
-                    case KeyEvent.KEYCODE_NUMPAD_8:
-                        pinBuilder.append('8');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_9:
-                    case KeyEvent.KEYCODE_NUMPAD_9:
-                        pinBuilder.append('9');
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_DEL:
-                        if (pinBuilder.length() > 0) {
-                            pinBuilder.deleteCharAt(pinBuilder.length() - 1);
-                        }
-                        updateDots(dotsDisplay, pinBuilder.length());
-                        return true;
-                    case KeyEvent.KEYCODE_ENTER:
-                    case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                        submitPin.run();
-                        return true;
-                }
+
+        // Attach to the dialog, not the root: digits typed while a keypad button has focus
+        // must still reach the PIN buffer.
+        configDialog.setOnKeyListener((dialog, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) {
+                return false;
             }
+
+            int digit = keyCodeToDigit(keyCode);
+
+            if (digit >= 0) {
+                pinBuilder.append((char) ('0' + digit));
+                updateDots(dotsDisplay, pinBuilder.length());
+                return true;
+            }
+
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_DEL:
+                    if (pinBuilder.length() > 0) {
+                        pinBuilder.deleteCharAt(pinBuilder.length() - 1);
+                    }
+                    updateDots(dotsDisplay, pinBuilder.length());
+                    return true;
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                    submitPin.run();
+                    return true;
+            }
+
             return false;
         });
 
@@ -230,6 +227,21 @@ public class SimpleEditDialog {
         configDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> submitPin.run());
 
         configDialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(view -> configDialog.dismiss());
+    }
+
+    /**
+     * Maps the remote's number keys to 0-9, or -1 for any other key.
+     */
+    private static int keyCodeToDigit(int keyCode) {
+        if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+            return keyCode - KeyEvent.KEYCODE_0;
+        }
+
+        if (keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9) {
+            return keyCode - KeyEvent.KEYCODE_NUMPAD_0;
+        }
+
+        return -1;
     }
 
     private static void updateDots(TextView dotsDisplay, int count) {

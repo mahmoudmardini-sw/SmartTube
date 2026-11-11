@@ -549,7 +549,7 @@
     <string name="cancel_pause">Resume family control now</string>
     <string name="change_pin">Change PIN</string>
     <string name="set_pin">Set PIN</string>
-    <string name="pin_remote_hint">Use the number keys on your remote to enter the PIN</string>
+    <string name="pin_remote_hint">Use the number keys on your remote or the on-screen keypad</string>
     <string name="wrong_pin">Wrong PIN</string>
     <string name="pin_locked_try_later">Too many wrong PINs — try again in %d seconds</string>
     <string name="confirm_pin">Confirm PIN</string>

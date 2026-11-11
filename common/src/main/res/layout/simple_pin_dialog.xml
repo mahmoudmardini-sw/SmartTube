@@ -23,10 +23,78 @@
         android:fontFamily="monospace"
         android:gravity="center" />
 
+    <GridLayout
+        android:id="@+id/pin_keypad"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layoutDirection="ltr"
+        android:columnCount="3"
+        android:alignmentMode="alignBounds"
+        android:useDefaultMargins="true">
+
+        <Button
+            android:id="@+id/pin_key_1"
+            style="@style/PinPadButton"
+            android:text="1" />
+
+        <Button
+            android:id="@+id/pin_key_2"
+            style="@style/PinPadButton"
+            android:text="2" />
+
+        <Button
+            android:id="@+id/pin_key_3"
+            style="@style/PinPadButton"
+            android:text="3" />
+
+        <Button
+            android:id="@+id/pin_key_4"
+            style="@style/PinPadButton"
+            android:text="4" />
+
+        <Button
+            android:id="@+id/pin_key_5"
+            style="@style/PinPadButton"
+            android:text="5" />
+
+        <Button
+            android:id="@+id/pin_key_6"
+            style="@style/PinPadButton"
+            android:text="6" />
+
+        <Button
+            android:id="@+id/pin_key_7"
+            style="@style/PinPadButton"
+            android:text="7" />
+
+        <Button
+            android:id="@+id/pin_key_8"
+            style="@style/PinPadButton"
+            android:text="8" />
+
+        <Button
+            android:id="@+id/pin_key_9"
+            style="@style/PinPadButton"
+            android:text="9" />
+
+        <Button
+            android:id="@+id/pin_key_0"
+            style="@style/PinPadButton"
+            android:layout_column="1"
+            android:text="0" />
+
+        <Button
+            android:id="@+id/pin_key_delete"
+            style="@style/PinPadButton"
+            android:text="&#x232B;" />
+
+    </GridLayout>
+
     <TextView
         android:id="@+id/pin_hint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
         android:text="@string/pin_remote_hint"
         android:textColor="@color/white_50"
         android:textSize="16sp"

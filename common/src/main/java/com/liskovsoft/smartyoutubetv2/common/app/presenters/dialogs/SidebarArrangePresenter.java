@@ -11,6 +11,8 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.service.SidebarService;
+import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.MasterPasswordData;
 import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
@@ -143,10 +145,32 @@ public class SidebarArrangePresenter extends BasePresenter<Void> {
 
             dialog.appendSingleButton(UiOptionItem.from(
                     getContext().getString(R.string.show_section, title),
-                    optionItem -> {
-                        BrowsePresenter.instance(getContext()).enableSection(sectionId, true);
-                        reopen();
-                    }));
+                    optionItem -> showHiddenSection(sectionId)));
+        }
+    }
+
+    /**
+     * Re-showing a hidden section must not be a way around family control: the parent
+     * hides restricted sections, and this menu is reachable from the child account.
+     */
+    private void showHiddenSection(int sectionId) {
+        MasterPasswordData masterPassword = MasterPasswordData.instance(getContext());
+
+        if (FamilyControlData.instance(getContext()).isFamilyControlConfigured() && masterPassword.hasPin()) {
+            SimpleEditDialog.showPin(
+                    getContext(),
+                    getContext().getString(R.string.enter_pin),
+                    pin -> {
+                        if (masterPassword.isPinValid(pin)) {
+                            BrowsePresenter.instance(getContext()).enableSection(sectionId, true);
+                            reopen();
+                            return true;
+                        }
+                        return false;
+                    });
+        } else {
+            BrowsePresenter.instance(getContext()).enableSection(sectionId, true);
+            reopen();
         }
     }
 

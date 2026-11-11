@@ -25,16 +25,25 @@ public class MasterPasswordData {
     private static final long PIN_LOCKOUT_MS = 60_000;
     /** Minimum accepted PIN length: shorter PINs are trivially brute-forced. */
     private static final int PIN_MIN_LENGTH = 4;
+    /**
+     * Wall-clock drift tolerated before a jump is treated as tampering (NTP corrections,
+     * the user fixing the clock by a few minutes).
+     */
+    private static final long MAX_CLOCK_DRIFT_MS = 60_000;
+    private static final int FIELD_TRUSTED_WALL_MS = 6;
+    private static final int FIELD_LAST_ELAPSED_MS = 7;
     @SuppressLint("StaticFieldLeak")
     private static volatile MasterPasswordData sInstance;
     private final AppPrefs mPrefs;
-    private final Runnable mPersistStateInt = this::persistStateInt;
     private String mPinHash;
     private boolean mLockEnabled;
     private int mLockStartMinutes;
     private int mLockEndMinutes;
     private int mFailedPinAttempts;
     private long mPinLockoutUntilMs;
+    /** Last trusted wall-clock time (epoch ms) and the elapsedRealtime anchor it was taken at. */
+    private long mTrustedWallMs;
+    private long mLastElapsedMs;
 
     private MasterPasswordData(Context context) {
         mPrefs = AppPrefs.instance(context);
@@ -174,7 +183,8 @@ public class MasterPasswordData {
 
     public void setLockEnabled(boolean enabled) {
         mLockEnabled = enabled;
-        persistState();
+        // Security setting: a force-kill right after the toggle must not undo it.
+        persistNow();
     }
 
     public int getLockStartMinutes() {
@@ -183,7 +193,7 @@ public class MasterPasswordData {
 
     public void setLockStartMinutes(int minutes) {
         mLockStartMinutes = minutes;
-        persistState();
+        persistNow();
     }
 
     public int getLockEndMinutes() {
@@ -192,7 +202,7 @@ public class MasterPasswordData {
 
     public void setLockEndMinutes(int minutes) {
         mLockEndMinutes = minutes;
-        persistState();
+        persistNow();
     }
 
     /**
@@ -222,7 +232,54 @@ public class MasterPasswordData {
 
     private int getCurrentMinutesOfDay() {
         Calendar calendar = Calendar.getInstance();
+        // Trusted clock: moving the system time must not unlock the app outside its window.
+        calendar.setTimeInMillis(updateTrustedClock());
         return calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE);
+    }
+
+    /**
+     * Wall-clock time the access schedule may trust.
+     * <p>
+     * Once anchored, time is projected with {@link SystemClock#elapsedRealtime()} (which keeps
+     * counting during sleep) and wall-clock jumps beyond {@link #MAX_CLOCK_DRIFT_MS} are
+     * ignored, so changing the system time doesn't move the app in or out of its lock window.
+     * <p>
+     * A reboot resets {@code elapsedRealtime}. A clock moved backwards is still caught (the
+     * persisted anchor is ahead of the wall clock); a clock moved forward across a reboot
+     * looks exactly like the device having been off for that long.
+     */
+    private synchronized long updateTrustedClock() {
+        long nowWallMs = System.currentTimeMillis();
+        long nowElapsedMs = SystemClock.elapsedRealtime();
+
+        if (mTrustedWallMs <= 0) {
+            mTrustedWallMs = nowWallMs;
+            mLastElapsedMs = nowElapsedMs;
+            return mTrustedWallMs;
+        }
+
+        if (nowElapsedMs < mLastElapsedMs) {
+            // Reboot: elapsedRealtime restarted. Keep the old anchor when the wall clock went
+            // backwards (fail closed); otherwise re-anchor to the wall clock.
+            if (nowWallMs >= mTrustedWallMs - MAX_CLOCK_DRIFT_MS) {
+                mTrustedWallMs = nowWallMs;
+            }
+            mLastElapsedMs = nowElapsedMs;
+            return mTrustedWallMs;
+        }
+
+        long projectedWallMs = mTrustedWallMs + (nowElapsedMs - mLastElapsedMs);
+
+        if (Math.abs(nowWallMs - projectedWallMs) > MAX_CLOCK_DRIFT_MS) {
+            // Wall clock was moved: keep the monotonic projection as the trusted time.
+            mTrustedWallMs = projectedWallMs;
+        } else {
+            // Normal drift: re-anchor to the wall clock.
+            mTrustedWallMs = nowWallMs;
+        }
+
+        mLastElapsedMs = nowElapsedMs;
+        return mTrustedWallMs;
     }
 
     private synchronized void restoreState() {
@@ -246,6 +303,8 @@ public class MasterPasswordData {
         mLockEndMinutes = Helpers.parseInt(split, offset + 3, 18 * 60);
         mFailedPinAttempts = Helpers.parseInt(split, offset + 4, 0);
         mPinLockoutUntilMs = Helpers.parseLong(split, offset + 5, 0);
+        mTrustedWallMs = Helpers.parseLong(split, offset + FIELD_TRUSTED_WALL_MS, 0);
+        mLastElapsedMs = Helpers.parseLong(split, offset + FIELD_LAST_ELAPSED_MS, 0);
 
         if (data == null || data.isEmpty()) {
             migrateLegacyData();
@@ -300,13 +359,9 @@ public class MasterPasswordData {
         persistStateInt();
     }
 
-    private void persistState() {
-        Utils.postDelayed(mPersistStateInt, 10_000);
-    }
-
     private void persistStateInt() {
         mPrefs.setData(MASTER_PASSWORD_DATA, Helpers.mergeData(
                 FORMAT_VERSION, mPinHash, mLockEnabled, mLockStartMinutes, mLockEndMinutes,
-                mFailedPinAttempts, mPinLockoutUntilMs));
+                mFailedPinAttempts, mPinLockoutUntilMs, mTrustedWallMs, mLastElapsedMs));
     }
 }

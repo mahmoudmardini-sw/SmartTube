@@ -12,7 +12,6 @@ import androidx.leanback.widget.VerticalGridPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsGroup;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsItem;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
-import com.liskovsoft.smartyoutubetv2.common.prefs.FamilyControlData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MasterPasswordData;
 import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
@@ -127,13 +126,15 @@ public class SettingsGridFragment extends GridFragment implements SettingsSectio
             if (item instanceof SettingsItem) {
                 MasterPasswordData masterPasswordData = MasterPasswordData.instance(getContext());
 
-                if (!FamilyControlData.instance(getContext()).isFamilyControlConfigured() || !masterPasswordData.hasPin()) {
+                // Protect settings whenever a PIN exists (family control, app lock or a
+                // migrated legacy master password), not only while family control is active:
+                // a pause or a disabled family control must not expose the settings.
+                if (!masterPasswordData.hasPin()) {
                     ((SettingsItem) item).onClick.run();
                 } else {
-                    SimpleEditDialog.showPassword(
+                    SimpleEditDialog.showPin(
                             getContext(),
                             getContext().getString(R.string.enter_settings_password),
-                            null,
                             newValue -> {
                                 if (masterPasswordData.isPinValid(newValue)) {
                                     ((SettingsItem) item).onClick.run();

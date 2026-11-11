@@ -155,10 +155,9 @@ public class FamilyControlSettingsPresenter extends BasePresenter<Void> {
     private void askCurrentPin(AppDialogPresenter presenter, Runnable onSuccess) {
         presenter.closeDialog();
 
-        SimpleEditDialog.showPassword(
+        SimpleEditDialog.showPin(
                 getContext(),
                 getContext().getString(R.string.enter_pin),
-                null,
                 current -> {
                     MasterPasswordData data = MasterPasswordData.instance(getContext());
                     long lockoutSec = data.getPinLockoutRemainingMs() / 1000;
@@ -181,10 +180,9 @@ public class FamilyControlSettingsPresenter extends BasePresenter<Void> {
     private void showPinDialog(AppDialogPresenter presenter, Runnable onSuccess) {
         presenter.closeDialog();
 
-        SimpleEditDialog.showPassword(
+        SimpleEditDialog.showPin(
                 getContext(),
                 getContext().getString(R.string.set_pin),
-                null,
                 first -> {
                     if (!MasterPasswordData.isPinAcceptable(first)) {
                         MessageHelpers.showMessage(getContext(), R.string.pin_too_weak);
@@ -192,10 +190,9 @@ public class FamilyControlSettingsPresenter extends BasePresenter<Void> {
                     }
 
                     // Second entry guards against a typo permanently locking the parent out.
-                    SimpleEditDialog.showPassword(
+                    SimpleEditDialog.showPin(
                             getContext(),
                             getContext().getString(R.string.confirm_pin),
-                            null,
                             second -> {
                                 if (!first.equals(second)) {
                                     MessageHelpers.showMessage(getContext(), R.string.pin_mismatch);
