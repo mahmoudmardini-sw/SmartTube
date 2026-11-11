@@ -35,7 +35,11 @@ Then work through these spots, which are the ones that have conflicted before:
 | Path | Why |
 | ---- | --- |
 | `.gitignore` | this fork adds `.zcode/`, upstream keeps adding its own entries |
-| `common/.../playback/controllers/VideoLoaderController.java` | this fork gates `onNextClicked()` behind family control; upstream keeps moving code (e.g. the sleep timer) out of this class |
+| `common/.../playback/controllers/ErrorFixerController.java` | fork's SABR client-fallback budget + terminal state vs upstream's `SabrReloadPlayerError`/`SabrBackoffError` actions. Keep both; reset `mSabrExhausted` in `onNewVideo`, not `onPlay` |
+| `common/.../playback/controllers/VideoLoaderController.java` | this fork gates `onNextClicked()` behind family control and tracks `mIsSabrActive`; upstream keeps moving code (sleep timer, live SABR) out of this class. Re-apply `mIsSabrActive` to the live-SABR branch |
+| `common/.../settings/GeneralSettingsPresenter.java` | fork removed child mode, settings/master password and update-check options; upstream keeps reorganizing categories (network settings moved into a single sub-dialog in 32.70+) |
+| `smarttubetv/.../dialogs/AppPreferenceManager.java` | upstream switched single switches to `CheckBoxPreference`; fork adds `TYPE_HEADER` + accent color |
+| `common/src/main/res/values-ar/strings.xml` | take upstream's file, then re-add the fork-only Arabic keys (the list is whatever is missing from `values/strings.xml`) |
 | `MediaServiceCore`, `SharedModules` | submodule pointers — see below |
 | `smarttubetv/build.gradle` | version numbers; keep upstream's (see “Version policy”) |
 
@@ -45,16 +49,16 @@ merge can still leave a stale copy of moved code.
 
 ## Submodules
 
-Both submodules point at forks under `mahmoudmardini-sw` because they carry two local fixes that
+Both submodules point at forks under `mahmoudmardini-sw` because they carry local fixes that
 upstream still does not have:
 
 | Submodule | Fix |
 | --------- | --- |
-| `MediaServiceCore` | `YouTubeAccount.equals` treats a matching email as the same account, so re-fetched accounts merge instead of duplicating (this is the "konto reset" duplicate-account bug) |
-| `SharedModules` | `SharedPreferencesBase.getData` writes the migrated file before clearing the `SharedPreferences` entry, so an account reset can no longer lose data |
+| `MediaServiceCore` | `YouTubeAccount.equals` treats a matching email as the same account, so re-fetched accounts merge instead of duplicating (the "konto reset" duplicate-account bug); plus scoped equality with `hashCode` and walking the client list on repeated switches |
+| `SharedModules` | `SharedPreferencesBase.getData` writes the migrated file before clearing the `SharedPreferences` entry, so an account reset can no longer lose data; plus atomic file writes, exact change detection and a `parseLong` overflow guard |
 
-They are stored as commits on `master` in the forks, so a fresh clone gets them via
-`git submodule update --init`.
+They are stored on the `fix/hardening-<version>` branches in the forks (the app release pins the
+exact commits). A fresh clone needs `git submodule update --init` after the branch is pushed.
 
 **After an upstream submodule bump** (the app release pins new submodule commits), re-apply the
 fixes on top of the new pin:
@@ -62,25 +66,27 @@ fixes on top of the new pin:
 ```bash
 # SharedModules
 git -C SharedModules fetch origin
-git -C SharedModules checkout <new pinned commit>
-git -C SharedModules cherry-pick <the MOD: prefs migration commit>
-git -C SharedModules push fork HEAD:master
+git -C SharedModules switch -c fix/hardening-<version> <new pinned commit>
+git -C SharedModules cherry-pick <MOD: prefs migration commit> <hardening commit>
+git -C SharedModules push fork fix/hardening-<version>
 
-# MediaServiceCore (its fix also carries a nested-submodule pointer change — keep upstream's)
+# MediaServiceCore (its fix also carries a nested-submodule pointer change)
 git -C MediaServiceCore fetch origin
-git -C MediaServiceCore checkout <new pinned commit>
-git -C MediaServiceCore cherry-pick <the MOD: account equality commit>
-git -C MediaServiceCore push fork HEAD:master
+git -C MediaServiceCore switch -c fix/hardening-<version> <new pinned commit>
+git -C MediaServiceCore cherry-pick <MOD: account equality commit> <hardening commit>
+# VideoInfoService was renamed upstream (VideoInfoType -> Client, mActualClient/mNextClient,
+# CLIENT_LIST, switchNextClientInt). Adapt the hardening commit, then:
+git -C MediaServiceCore/SharedModules fetch "C:\...\SmartTube\SharedModules" fix/hardening-<version>
+git -C MediaServiceCore/SharedModules checkout <new SharedModules commit>
+git -C MediaServiceCore add SharedModules && git -C MediaServiceCore commit -m "chore: update SharedModules"
+git -C MediaServiceCore push fork fix/hardening-<version>
 
-# record the new pointers
+# record the new pointers in the superproject
 git add MediaServiceCore SharedModules && git commit
 ```
 
-Find the fix commits with `git -C <submodule> log --grep="^MOD:"`.
-
-Note: the `MediaServiceCore` pin currently also includes one upstream commit that is newer than
-the app release (the fix that stopped printing OAuth refresh tokens to logcat). To stay exactly on
-the release, reset the submodule to the commit the release tag pins, then re-apply the fix.
+Find the fix commits with `git -C <submodule> log --grep="^MOD:"` and `--grep="Hardening"`.
+The 32.72 merge used upstream pins `MediaServiceCore 4be5193d` and `SharedModules 5b6b5d1d`.
 
 ## Version policy
 
@@ -152,3 +158,12 @@ hashed at rest (no universal backdoor); `parseLong` overflow guard; atomic file 
 profile-key snapshotting; `YouTubeAccount` email equality scoped to page/channel + `hashCode`;
 SABR fallback budget resets per video with client rotation and a terminal no-retry state;
 family-control Next goes through the `onNextClicked` chain (incl. remote control).
+
+## Merge history
+
+| Branch | Upstream base | Notes |
+| ------ | ------------- | ----- |
+| `merge/32.47s` | `32.47s` | first fork merge |
+| `merge/32.56s` | `32.56s` | self-update disabled |
+| `merge/32.72` | `yuliskov/master` @ `32.72` (versionCode 2462) | SABR live support, DIAL casting, add-to-queue intent, settings reorg; submodules re-pinned to `MediaServiceCore 4be5193d` / `SharedModules 5b6b5d1d` |
+
